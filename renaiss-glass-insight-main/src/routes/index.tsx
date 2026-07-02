@@ -65,7 +65,7 @@ function Index() {
     {
       id: "welcome",
       sender: "bot",
-      timestamp: new Date(),
+      timestamp: new Date(1782992681856),
       text: "Welcome to Renaiss Intelligence. I am your Banker Bot. Ask me to search certification serials, analyze pack expected values, or view recent marketplace sales.",
       type: "text",
     },
