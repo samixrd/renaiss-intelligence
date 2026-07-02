@@ -1,0 +1,25 @@
+# Secrets — never deploy these
+.env
+.env.*
+
+# Local SQLite dev database
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Local run scripts (not needed on Vercel)
+run.bat
+run.ps1
+run.sh
