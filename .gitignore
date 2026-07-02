@@ -25,3 +25,4 @@ env/
 # IDE
 .vscode/
 .idea/
+.vercel

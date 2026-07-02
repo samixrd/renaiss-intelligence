@@ -5,7 +5,10 @@
  * responses.  Errors are surfaced as rejected promises.
  */
 
-const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const BASE = import.meta.env.VITE_API_BASE_URL || 
+  (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")
+    ? "https://renaiss-glass-insight-main.vercel.app"
+    : "http://localhost:8000");
 
 /* ── Response types ──────────────────────────────────────────────── */
 
