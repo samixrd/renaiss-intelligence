@@ -7,11 +7,10 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 from datetime import datetime, timezone
 
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.database import (
@@ -22,10 +21,29 @@ from app.database import (
 )
 from app.pack_ev import fetch_recent_pulls
 
+RENAISS_API_BASE = "https://api.renaissos.com"
+
 log = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 
+
+async def _fetch_marketplace_items(offset: int = 0) -> list[dict]:
+    """Fetch marketplace listings directly from the Renaiss Index API.
+
+    Calls GET /v1/marketplace?offset=<offset> and returns the
+    ``collection`` list from the JSON response.  Falls back to an empty
+    list and logs the error so callers can continue gracefully.
+    """
+    url = f"{RENAISS_API_BASE}/v1/marketplace"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, params={"offset": offset})
+            resp.raise_for_status()
+            return resp.json().get("collection", [])
+    except Exception:
+        log.exception("Failed to fetch marketplace listings from %s", url)
+        return []
 
 # ── Job 1: Gacha pull history ─────────────────────────────────────────
 
@@ -44,25 +62,15 @@ async def sync_recent_pulls() -> None:
 # ── Job 2: Marketplace sales snapshot ────────────────────────────────
 
 async def sync_marketplace_sales() -> None:
-    """Snapshot current marketplace listings into marketplace_sales."""
-    log.info("▶ sync_marketplace_sales started")
-    import sys
-    executable = "npx.cmd" if sys.platform == "win32" else "npx"
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            executable,
-            "renaiss",
-            "marketplace",
-            "--json",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            log.error("marketplace CLI failed: %s", stderr.decode().strip())
-            return
+    """Snapshot current marketplace listings into marketplace_sales.
 
-        items = json.loads(stdout.decode()).get("collection", [])
+    Fetches data directly from the Renaiss Index API instead of using
+    the ``npx renaiss marketplace`` CLI (which is unavailable on Vercel
+    serverless).
+    """
+    log.info("▶ sync_marketplace_sales started")
+    try:
+        items = await _fetch_marketplace_items(offset=0)
         saved = 0
         now = datetime.now(timezone.utc)
 
@@ -100,27 +108,15 @@ def _calc_verdict(gap: float) -> str:
 
 async def sync_marketplace_listings() -> None:
     """Fetch marketplace listings, compute ask-vs-FMV gap, upsert into
-    marketplace_listings table."""
-    log.info("▶ sync_marketplace_listings started")
-    import sys
-    executable = "npx.cmd" if sys.platform == "win32" else "npx"
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            executable,
-            "renaiss",
-            "marketplace",
-            "--json",
-            "--offset",
-            "0",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            log.error("marketplace listings CLI failed: %s", stderr.decode().strip())
-            return
+    marketplace_listings table.
 
-        items = json.loads(stdout.decode()).get("collection", [])
+    Fetches data directly from the Renaiss Index API instead of using
+    the ``npx renaiss marketplace`` CLI (which is unavailable on Vercel
+    serverless).
+    """
+    log.info("▶ sync_marketplace_listings started")
+    try:
+        items = await _fetch_marketplace_items(offset=0)
         upserted = 0
         now = datetime.now(timezone.utc)
 

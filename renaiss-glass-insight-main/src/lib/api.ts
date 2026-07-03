@@ -1,14 +1,15 @@
 /**
  * API client for the Renaiss Glass Insight FastAPI backend.
  *
- * All functions talk to http://localhost:8000 and return typed
- * responses.  Errors are surfaced as rejected promises.
+ * Reads the backend base URL from the VITE_API_URL environment variable.
+ * Falls back to the production Vercel deployment URL when the variable is
+ * not set (e.g. when the built bundle is served directly from Vercel without
+ * a local .env file).
  */
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 
-  (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")
-    ? "https://renaiss-glass-insight-main.vercel.app"
-    : "http://localhost:8000");
+const PRODUCTION_URL = "https://renaiss-glass-insight-main.vercel.app";
+
+const BASE = import.meta.env.VITE_API_URL || PRODUCTION_URL;
 
 /* ── Response types ──────────────────────────────────────────────── */
 
