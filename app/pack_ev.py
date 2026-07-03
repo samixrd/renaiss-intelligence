@@ -88,13 +88,15 @@ async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
         log.error("Unknown pack slug for pulls fetch: %s", pack_slug)
         return []
 
-    cmd = f"npx renaiss packs {pack_slug} --json"
-    log.info("Running CLI command: %s", cmd)
+    import sys
+    executable = "npx.cmd" if sys.platform == "win32" else "npx"
+    args = ["renaiss", "packs", pack_slug, "--json"]
+    log.info("Running CLI command: %s %s", executable, " ".join(args))
 
     try:
-        # Use shell execution since npx on Windows might be a cmd/batch file.
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
+        proc = await asyncio.create_subprocess_exec(
+            executable,
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

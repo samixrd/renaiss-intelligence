@@ -1,6 +1,7 @@
 """Renaiss Glass Insight — FastAPI application entry point."""
 
 import logging
+import time
 import traceback
 from contextlib import asynccontextmanager
 
@@ -21,6 +22,77 @@ from app.pack_ev import calculate_all_packs_ev, list_packs
 from app.renaiss_service import close_client, search_by_cert
 
 
+# ── Simple TTL Cache ──────────────────────────────────────────────────
+
+
+class SimpleTTLCache:
+    def __init__(self):
+        self._cache = {}
+
+    def get(self, key):
+        if key in self._cache:
+            val, expiry = self._cache[key]
+            if expiry is None or time.time() < expiry:
+                return val
+            else:
+                del self._cache[key]
+        return None
+
+    def set(self, key, value, ttl_seconds):
+        expiry = time.time() + ttl_seconds if ttl_seconds is not None else None
+        self._cache[key] = (value, expiry)
+
+    def clear(self):
+        self._cache.clear()
+
+
+cache = SimpleTTLCache()
+
+
+# ── Warmup Cache Helper ───────────────────────────────────────────────
+
+
+async def warmup_cache():
+    """Pre-fetch and cache pack-ev and recent-sales data."""
+    log.info("Starting cache warmup...")
+    # 1) Warm up pack-ev (5 minutes cache)
+    try:
+        results = await calculate_all_packs_ev()
+        cache.set("pack-ev", results, 300)
+        log.info("Warmed up pack-ev cache")
+    except Exception as exc:
+        log.error("Failed to warm up pack-ev: %s", exc)
+
+    # 2) Warm up recent-sales (2 minutes cache)
+    try:
+        rows = await get_recent_marketplace_listings(limit=20)
+        def verdict(gap: float) -> str:
+            if gap > 10.0:
+                return "Overpriced"
+            if gap < -10.0:
+                return "Underpriced"
+            return "Fair"
+        sales = [
+            {
+                "id": row.id,
+                "card_name": row.card_name,
+                "set_name": row.set_name,
+                "year": row.year,
+                "grade": row.grade,
+                "ask_price": row.ask_price,
+                "fmv": row.fmv,
+                "price_gap": row.price_gap,
+                "verdict": verdict(row.price_gap),
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in rows
+        ]
+        cache.set("recent-sales", sales, 120)
+        log.info("Warmed up recent-sales cache")
+    except Exception as exc:
+        log.error("Failed to warm up recent-sales: %s", exc)
+
+
 # ── Lifespan ──────────────────────────────────────────────────────────
 
 
@@ -29,6 +101,7 @@ async def lifespan(_app: FastAPI):
     """Manage startup / shutdown resources."""
     await init_db()  # Create tables on first run.
     start_scheduler()  # Start background periodic syncer.
+    await warmup_cache()  # Warm up the cache before the first request.
     yield
     # Tear down shared resources on shutdown.
     stop_scheduler()  # Stop background periodic syncer.
@@ -79,11 +152,24 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/warmup")
+async def warmup():
+    """Explicitly trigger cache warmup."""
+    await warmup_cache()
+    return {"status": "success", "message": "Warmup completed"}
+
+
 @app.get("/search")
 async def search(cert: str = Query(..., description="Certification number")):
     """Look up a graded cert, persist the price, and return FMV with a
     conformal (or fallback) prediction interval."""
     log.info("Search request: cert=%r", cert)
+    cache_key = f"search:{cert}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        log.info("Cache hit for cert=%r", cert)
+        return cached
+
     try:
         # 1) Fetch live data from the Renaiss Index API.
         api_result = await search_by_cert(cert)
@@ -114,7 +200,7 @@ async def search(cert: str = Query(..., description="Certification number")):
         )
 
         # 4) Return combined response.
-        return {
+        response_data = {
             "cert": cert,
             "card_name": api_result.get("card_name", cert),
             "set_name": api_result.get("set_name", ""),
@@ -127,6 +213,8 @@ async def search(cert: str = Query(..., description="Certification number")):
             "confidence_tier": api_result["confidence_tier"],
             "freshness_days": api_result["freshness_days"],
         }
+        cache.set(cache_key, response_data, 60)
+        return response_data
 
     except httpx.HTTPStatusError as exc:
         log.error(
@@ -164,8 +252,14 @@ async def search(cert: str = Query(..., description="Certification number")):
 @app.get("/pack-ev")
 async def pack_ev():
     """Calculate the expected value of opening all packs."""
+    cached = cache.get("pack-ev")
+    if cached is not None:
+        log.info("Cache hit for pack-ev")
+        return cached
+
     try:
         results = await calculate_all_packs_ev()
+        cache.set("pack-ev", results, 300)
         return results
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -180,6 +274,11 @@ async def packs():
 @app.get("/recent-sales")
 async def recent_sales():
     """Return the last 20 marketplace listings with price-gap analysis."""
+    cached = cache.get("recent-sales")
+    if cached is not None:
+        log.info("Cache hit for recent-sales")
+        return cached
+
     rows = await get_recent_marketplace_listings(limit=20)
 
     def verdict(gap: float) -> str:
@@ -189,7 +288,7 @@ async def recent_sales():
             return "Underpriced"
         return "Fair"
 
-    return [
+    results = [
         {
             "id": row.id,
             "card_name": row.card_name,
@@ -204,3 +303,5 @@ async def recent_sales():
         }
         for row in rows
     ]
+    cache.set("recent-sales", results, 120)
+    return results

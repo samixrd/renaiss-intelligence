@@ -46,9 +46,14 @@ async def sync_recent_pulls() -> None:
 async def sync_marketplace_sales() -> None:
     """Snapshot current marketplace listings into marketplace_sales."""
     log.info("▶ sync_marketplace_sales started")
+    import sys
+    executable = "npx.cmd" if sys.platform == "win32" else "npx"
     try:
-        proc = await asyncio.create_subprocess_shell(
-            "npx renaiss marketplace --json",
+        proc = await asyncio.create_subprocess_exec(
+            executable,
+            "renaiss",
+            "marketplace",
+            "--json",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -97,9 +102,16 @@ async def sync_marketplace_listings() -> None:
     """Fetch marketplace listings, compute ask-vs-FMV gap, upsert into
     marketplace_listings table."""
     log.info("▶ sync_marketplace_listings started")
+    import sys
+    executable = "npx.cmd" if sys.platform == "win32" else "npx"
     try:
-        proc = await asyncio.create_subprocess_shell(
-            "npx renaiss marketplace --json --offset 0",
+        proc = await asyncio.create_subprocess_exec(
+            executable,
+            "renaiss",
+            "marketplace",
+            "--json",
+            "--offset",
+            "0",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
