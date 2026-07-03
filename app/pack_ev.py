@@ -1,19 +1,22 @@
 """Pack expected-value calculator.
 
 Calculates the expected value (EV) of card packs using statistical rarity
-modeling or real-time pull data from the Renaiss CLI tool.
+modeling or real-time pull data from the Renaiss Index API.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timezone
+
+import httpx
 
 from app.database import check_cert_exists, save_card_price
 
 log = logging.getLogger(__name__)
+
+RENAISS_API_BASE = "https://api.renaissos.com"
 
 # ── EV Modeling Configuration ─────────────────────────────────────────
 
@@ -76,8 +79,12 @@ PACK_METADATA = {
 
 
 async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
-    """Run `npx renaiss packs {pack_slug} --json` via subprocess, parse the output,
-    and persist the pulls to the SQLite database.
+    """Fetch recent pack opens from the Renaiss Index API and persist them.
+
+    Calls **GET /v1/packs/{pack_slug}/recent-opens** directly instead of
+    using the ``npx renaiss packs`` CLI, which is unavailable on Vercel
+    serverless.  Falls back to an empty list on any error so the static
+    probability-model EV is still returned.
 
     Returns
     -------
@@ -88,30 +95,17 @@ async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
         log.error("Unknown pack slug for pulls fetch: %s", pack_slug)
         return []
 
-    import sys
-    executable = "npx.cmd" if sys.platform == "win32" else "npx"
-    args = ["renaiss", "packs", pack_slug, "--json"]
-    log.info("Running CLI command: %s %s", executable, " ".join(args))
+    url = f"{RENAISS_API_BASE}/v1/packs/{pack_slug}/recent-opens"
+    log.info("Fetching recent pulls from API: GET %s", url)
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            executable,
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
 
-        stdout, stderr = await proc.communicate()
-
-        if proc.returncode != 0:
-            err_msg = stderr.decode().strip()
-            log.error("CLI run failed with exit code %s: %s", proc.returncode, err_msg)
-            return []
-
-        data = json.loads(stdout.decode())
         pulls = data.get("cardPack", {}).get("recentOpenedPacks", [])
-
-        log.info("Parsed %d recent pulls for %s from CLI", len(pulls), pack_slug)
+        log.info("Parsed %d recent pulls for %s from API", len(pulls), pack_slug)
 
         saved_count = 0
         pack_name = PACK_METADATA[pack_slug]["name"]

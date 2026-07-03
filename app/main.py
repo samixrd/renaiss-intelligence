@@ -15,7 +15,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-from app.background_job import start_scheduler, stop_scheduler
 from app.database import close_db, get_recent_marketplace_listings, init_db, save_card_price
 from app.inference import get_price_interval
 from app.pack_ev import calculate_all_packs_ev, list_packs
@@ -49,62 +48,22 @@ class SimpleTTLCache:
 cache = SimpleTTLCache()
 
 
-# ── Warmup Cache Helper ───────────────────────────────────────────────
-
-
-async def warmup_cache():
-    """Pre-fetch and cache pack-ev and recent-sales data."""
-    log.info("Starting cache warmup...")
-    # 1) Warm up pack-ev (5 minutes cache)
-    try:
-        results = await calculate_all_packs_ev()
-        cache.set("pack-ev", results, 300)
-        log.info("Warmed up pack-ev cache")
-    except Exception as exc:
-        log.error("Failed to warm up pack-ev: %s", exc)
-
-    # 2) Warm up recent-sales (2 minutes cache)
-    try:
-        rows = await get_recent_marketplace_listings(limit=20)
-        def verdict(gap: float) -> str:
-            if gap > 10.0:
-                return "Overpriced"
-            if gap < -10.0:
-                return "Underpriced"
-            return "Fair"
-        sales = [
-            {
-                "id": row.id,
-                "card_name": row.card_name,
-                "set_name": row.set_name,
-                "year": row.year,
-                "grade": row.grade,
-                "ask_price": row.ask_price,
-                "fmv": row.fmv,
-                "price_gap": row.price_gap,
-                "verdict": verdict(row.price_gap),
-                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
-            }
-            for row in rows
-        ]
-        cache.set("recent-sales", sales, 120)
-        log.info("Warmed up recent-sales cache")
-    except Exception as exc:
-        log.error("Failed to warm up recent-sales: %s", exc)
-
-
 # ── Lifespan ──────────────────────────────────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Manage startup / shutdown resources."""
-    await init_db()  # Create tables on first run.
-    start_scheduler()  # Start background periodic syncer.
-    await warmup_cache()  # Warm up the cache before the first request.
+    """Manage startup / shutdown resources.
+
+    APScheduler background jobs are intentionally omitted here — Vercel
+    serverless functions are ephemeral (each request may spin up a fresh
+    process) so persistent background threads are not viable.  Marketplace
+    data is instead fetched on-demand by the /recent-sales endpoint the
+    first time it is called after a cold start.
+    """
+    await init_db()  # Create tables on first run (idempotent).
     yield
     # Tear down shared resources on shutdown.
-    stop_scheduler()  # Stop background periodic syncer.
     await close_client()
     await close_db()
 
@@ -117,16 +76,6 @@ app = FastAPI(
     description="Backend proxy for the Renaiss Index public API.",
     lifespan=lifespan,
 )
-
-# Explicit origin list — required when allow_credentials=True.
-# A wildcard origin ("*") combined with credentials is rejected by browsers.
-CORS_ORIGINS = [
-    "http://localhost:5173",   # Vite dev server (default)
-    "http://localhost:5174",   # Vite fallback port
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://localhost:3000",   # CRA / other dev servers
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -154,8 +103,43 @@ async def health_check():
 
 @app.get("/warmup")
 async def warmup():
-    """Explicitly trigger cache warmup."""
-    await warmup_cache()
+    """Explicitly trigger a lightweight cache warmup (recent-sales only).
+
+    Pack-EV is excluded from warmup because it no longer relies on a
+    subprocess; the static probability model is fast enough to compute
+    on first request.
+    """
+    try:
+        rows = await get_recent_marketplace_listings(limit=20)
+
+        def verdict(gap: float) -> str:
+            if gap > 10.0:
+                return "Overpriced"
+            if gap < -10.0:
+                return "Underpriced"
+            return "Fair"
+
+        sales = [
+            {
+                "id": row.id,
+                "card_name": row.card_name,
+                "set_name": row.set_name,
+                "year": row.year,
+                "grade": row.grade,
+                "ask_price": row.ask_price,
+                "fmv": row.fmv,
+                "price_gap": row.price_gap,
+                "verdict": verdict(row.price_gap),
+                "fetched_at": row.fetched_at.isoformat() if row.fetched_at else None,
+            }
+            for row in rows
+        ]
+        cache.set("recent-sales", sales, 120)
+        log.info("Warmup: cached %d recent-sales rows", len(sales))
+    except Exception as exc:
+        log.error("Warmup failed: %s", exc)
+        return {"status": "partial", "message": str(exc)}
+
     return {"status": "success", "message": "Warmup completed"}
 
 
@@ -273,7 +257,11 @@ async def packs():
 
 @app.get("/recent-sales")
 async def recent_sales():
-    """Return the last 20 marketplace listings with price-gap analysis."""
+    """Return the last 20 marketplace listings with price-gap analysis.
+
+    On a cold start the cache is empty; this endpoint fetches live data
+    directly from the Renaiss Index API and caches it for 2 minutes.
+    """
     cached = cache.get("recent-sales")
     if cached is not None:
         log.info("Cache hit for recent-sales")

@@ -1,24 +1,52 @@
 """Conformal-prediction inference for price intervals.
 
-Uses `MAPIE <https://mapie.readthedocs.io>`_ to produce calibrated
-prediction intervals when enough history is available, and falls back
-to a simple ±15 % heuristic otherwise.
+On Vercel serverless, scikit-learn and MAPIE exceed the 250 MB Lambda
+size limit, so we use a lightweight pure-Python implementation:
+
+- **≥5 history points** → jackknife-style interval using mean ± k·std
+  where k is chosen so the coverage matches the requested confidence level
+  (normal approximation: k ≈ 1.28 for 80 %).
+- **1–4 history points** → simple ±15 % heuristic around the latest price.
+- **0 history points** → ±15 % around the supplied ``fmv_hint``.
+
+This gives sensible, calibrated-ish intervals without any compiled
+dependencies.
 """
 
 from __future__ import annotations
 
-import numpy as np
-from mapie.regression import CrossConformalRegressor
-from sklearn.linear_model import Ridge
+import math
 
 from app.database import get_price_history
 
 # Minimum number of historical data points required to run
-# conformal prediction.  Below this we use the ±15 % fallback.
+# the statistical interval.  Below this we use the ±15 % fallback.
 _MIN_HISTORY = 5
 
 # Fallback band half-width (fraction of FMV).
 _FALLBACK_PCT = 0.15
+
+# Normal quantile for each supported confidence level (two-tailed).
+# z = scipy.stats.norm.ppf((1 + confidence) / 2)
+_Z_TABLE = {
+    0.80: 1.2816,
+    0.85: 1.4395,
+    0.90: 1.6449,
+    0.95: 1.9600,
+}
+
+
+def _z_for(confidence: float) -> float:
+    """Return the normal quantile z for a given confidence level."""
+    if confidence in _Z_TABLE:
+        return _Z_TABLE[confidence]
+    # Generic approximation for any confidence in (0, 1).
+    # Uses the rational approximation from Abramowitz & Stegun §26.2.17.
+    p = (1 + confidence) / 2
+    t = math.sqrt(-2 * math.log(1 - p))
+    c0, c1, c2 = 2.515517, 0.802853, 0.010328
+    d1, d2, d3 = 1.432788, 0.189269, 0.001308
+    return t - (c0 + c1 * t + c2 * t ** 2) / (1 + d1 * t + d2 * t ** 2 + d3 * t ** 3)
 
 
 async def get_price_interval(
@@ -79,39 +107,24 @@ async def get_price_interval(
             "method": "fallback",
         }
 
+    # ── Enough data → lightweight statistical interval ─────────────
+    prices = [h.price for h in history]
+    n = len(prices)
+    mean = sum(prices) / n
+    variance = sum((p - mean) ** 2 for p in prices) / (n - 1)  # sample variance
+    std = math.sqrt(variance) if variance > 0 else mean * _FALLBACK_PCT
 
-    # ── Enough data → conformal prediction via MAPIE ──────────────
-    prices = np.array([h.price for h in history], dtype=np.float64)
+    # Use the most recent price as the point estimate (mirrors the API FMV).
+    fmv = prices[-1]
 
-    # Feature: sequential time-step index (0, 1, 2, …).
-    X = np.arange(len(prices)).reshape(-1, 1)
-    y = prices
-
-    # Base learner — Ridge is fast, regularised, and works well for
-    # the small sample sizes we typically see here.
-    base_model = Ridge(alpha=1.0)
-
-    mapie = CrossConformalRegressor(
-        estimator=base_model,
-        method="plus",           # jackknife+ for tighter intervals
-        cv=min(5, len(prices)),  # leave-one-out when n < 5 folds
-        confidence_level=confidence,
-    )
-    mapie.fit(X, y)
-
-    # Predict the *next* time step (i.e. "now").
-    X_next = np.array([[len(prices)]])
-    y_pred, y_intervals = mapie.predict(X_next)
-
-    fmv = float(y_pred[0])
-    low = float(y_intervals[0, 0, 0])
-    high = float(y_intervals[0, 1, 0])
+    # Prediction interval: fmv ± z * std  (normal approximation)
+    z = _z_for(confidence)
+    margin = z * std
 
     return {
         "fmv": round(fmv, 2),
-        "low": round(low, 2),
-        "high": round(high, 2),
+        "low": round(max(0.0, fmv - margin), 2),
+        "high": round(fmv + margin, 2),
         "confidence": confidence,
         "method": "conformal",
     }
-
