@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import {
   Send,
   Bot,
@@ -31,9 +31,9 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Renaiss Intelligence — Banker Bot & Market Advisor" },
-      { name: "description", content: "Chat with the Renaiss Banker Bot for calibrated price confidence and pack EV." },
-      { property: "og:title", content: "Renaiss Intelligence Banker Bot" },
-      { property: "og:description", content: "Sleek financial chatbot for collectibles." },
+      { name: "description", content: "Conformal price confidence and pack EV dashboard." },
+      { property: "og:title", content: "Renaiss Intelligence Dashboard" },
+      { property: "og:description", content: "Sleek financial dashboard for collectibles." },
     ],
   }),
   component: Index,
@@ -72,7 +72,7 @@ function NumberCounter({ value, prefix = "", suffix = "", duration = 0.8 }: { va
 function GlassCard({ children, className = "", delay = 0, interactive = false }: { children: ReactNode; className?: string; delay?: number; interactive?: boolean }) {
   const cardProps = interactive ? {
     whileHover: { 
-      scale: 1.02, 
+      scale: 1.015, 
       boxShadow: "0 0 25px rgba(232, 213, 183, 0.15), inset 0 0 0 1px rgba(232, 213, 183, 0.2)",
       borderColor: "rgba(232, 213, 183, 0.3)" 
     },
@@ -85,7 +85,7 @@ function GlassCard({ children, className = "", delay = 0, interactive = false }:
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay }}
       {...cardProps}
-      className={`relative overflow-hidden backdrop-blur-xl bg-[#16161E]/40 border border-white/10 rounded-2xl shadow-xl transition-colors ${className}`}
+      className={`relative overflow-hidden backdrop-blur-xl bg-[#16161E]/40 border border-white/10 rounded-2xl shadow-xl transition-all duration-300 ${className}`}
     >
       {/* Subtle Inner Glow */}
       <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
@@ -250,13 +250,13 @@ function MarketPulse({ totalListings, avgGap, lastSync }: { totalListings: numbe
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
-          <div className="text-[10px] text-[#A1A1AA]/80 uppercase">Listings</div>
+          <div className="text-[10px] text-[#A1A1AA]/80 uppercase">Listings Tracked</div>
           <div className="font-mono text-lg font-bold text-white tracking-tight">
             {totalListings || "--"}
           </div>
         </div>
         <div className="space-y-1">
-          <div className="text-[10px] text-[#A1A1AA]/80 uppercase">Avg Gap</div>
+          <div className="text-[10px] text-[#A1A1AA]/80 uppercase">Average Price Gap</div>
           <div className={`font-mono text-lg font-bold tracking-tight ${avgGap < 0 ? "text-green-400" : "text-red-400"}`}>
             {avgGap !== 0 ? `${avgGap > 0 ? "+" : ""}${avgGap.toFixed(1)}%` : "--"}
           </div>
@@ -266,38 +266,28 @@ function MarketPulse({ totalListings, avgGap, lastSync }: { totalListings: numbe
   );
 }
 
-function Spinner({ className = "" }: { className?: string }) {
-  return <Loader2 className={`animate-spin text-[#52525B] ${className}`} />;
-}
-
 function SkeletonLoader() {
   return (
-    <div className="space-y-3 p-4 bg-white/[0.01] border border-white/5 rounded-2xl animate-pulse w-full max-w-sm">
-      <div className="h-4 bg-white/5 rounded w-3/4" />
-      <div className="h-3 bg-white/5 rounded w-1/2" />
-      <div className="space-y-2 pt-2">
-        <div className="h-10 bg-white/5 rounded" />
-        <div className="h-16 bg-white/5 rounded" />
+    <div className="space-y-4 p-5 bg-[#16161E]/40 border border-white/5 rounded-2xl animate-pulse w-full">
+      <div className="h-6 bg-white/5 rounded w-1/3" />
+      <div className="h-4 bg-white/5 rounded w-1/2" />
+      <div className="grid grid-cols-3 gap-2 pt-2">
+        <div className="h-14 bg-white/5 rounded-xl" />
+        <div className="h-14 bg-white/5 rounded-xl" />
+        <div className="h-14 bg-white/5 rounded-xl" />
       </div>
+      <div className="h-28 bg-white/5 rounded-xl pt-2" />
     </div>
   );
 }
 
-/* ── Main Page ───────────────────────────────────────────────────── */
+/* ── Main Dashboard Component ────────────────────────────────────── */
 
 function Index() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      sender: "bot",
-      timestamp: new Date(),
-      text: "Welcome to Renaiss Intelligence. I am your Banker Bot. Ask me to search certification serials, analyze pack expected values, or view recent marketplace sales.",
-      type: "text",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isBotTyping, setIsBotTyping] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [certInput, setCertInput] = useState("");
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Side dashboard stats
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
@@ -312,11 +302,6 @@ function Index() {
     ? recentSales.reduce((acc, curr) => acc + curr.price_gap, 0) / recentSales.length 
     : 0;
   const lastSync = recentSales[0]?.fetched_at || "";
-
-  // Auto-scroll chat to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isBotTyping]);
 
   // Load dashboard widgets
   const loadDashboardData = useCallback(async () => {
@@ -344,181 +329,34 @@ function Index() {
   }, [loadDashboardData]);
 
   // Action: Search Cert
-  const handleCertSearch = async (certNum: string, messageId: string) => {
+  const handleSearch = async (certNum: string) => {
+    const trimmed = certNum.trim();
+    if (!trimmed) return;
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearchResult(null);
     try {
-      const res = await searchByCert(certNum);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Analysis complete for Cert #${certNum}.`,
-                type: "cert",
-                payload: res,
-              }
-            : msg
-        )
-      );
+      const res = await searchByCert(trimmed);
+      setSearchResult(res);
     } catch (err: any) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Error analyzing Cert #${certNum}: ${err.message || "Endpoint error. Make sure your Turso database and Renaiss API credentials are set."}`,
-              }
-            : msg
-        )
-      );
+      setSearchError(err.message || "Cert not found or error fetching data. Please ensure your backend config is correct.");
+    } finally {
+      setSearchLoading(false);
     }
-  };
-
-  // Action: Analyze Pack
-  const handlePackAnalyze = async (packName: string, messageId: string) => {
-    try {
-      const res = await fetchPackEV(packName);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Expected value for ${packName} calculated successfully.`,
-                type: "pack",
-                payload: res,
-              }
-            : msg
-        )
-      );
-    } catch (err: any) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Error fetching expected value for ${packName}: ${err.message}`,
-              }
-            : msg
-        )
-      );
-    }
-  };
-
-  // Action: List Recent Sales
-  const handleRecentSales = async (messageId: string) => {
-    try {
-      const res = await fetchRecentSales();
-      setRecentSales(res); // update dashboard too
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Here are the latest marketplace listings and price gaps:`,
-                type: "sales",
-                payload: res,
-              }
-            : msg
-        )
-      );
-    } catch (err: any) {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? {
-                ...msg,
-                loading: false,
-                text: `Error retrieving marketplace sales: ${err.message}`,
-              }
-            : msg
-        )
-      );
-    }
-  };
-
-  // Process message input
-  const processCommand = async (text: string) => {
-    const cleanText = text.trim();
-    if (!cleanText) return;
-
-    // User message
-    const userMsgId = `user-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      { id: userMsgId, sender: "user", timestamp: new Date(), text: cleanText },
-    ]);
-    setInput("");
-
-    // Bot typing
-    setIsBotTyping(true);
-    const botMsgId = `bot-${Date.now()}`;
-
-    // Add loading/placeholder message
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: botMsgId,
-          sender: "bot",
-          timestamp: new Date(),
-          text: "Processing request...",
-          loading: true,
-        },
-      ]);
-      setIsBotTyping(false);
-    }, 450);
-
-    // Parse commands/intent
-    setTimeout(() => {
-      const lower = cleanText.toLowerCase();
-      const certMatch = lower.match(/\b\d{8,}\b/) || cleanText.match(/cert\s*#?([a-zA-Z0-9-]+)/i);
-      
-      if (certMatch) {
-        const certVal = certMatch[1] || certMatch[0];
-        handleCertSearch(certVal, botMsgId);
-      } else if (lower.includes("omega")) {
-        handlePackAnalyze("OMEGA", botMsgId);
-      } else if (lower.includes("crypt") || lower.includes("rena")) {
-        handlePackAnalyze("RenaCrypt", botMsgId);
-      } else if (lower.includes("eden")) {
-        handlePackAnalyze("Eden Pack", botMsgId);
-      } else if (lower.includes("sale") || lower.includes("recent") || lower.includes("listing")) {
-        handleRecentSales(botMsgId);
-      } else {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === botMsgId
-              ? {
-                  ...msg,
-                  loading: false,
-                  text: `I couldn't identify the command. You can say:
-- "Check cert 30060064"
-- "Analyze Omega Pack"
-- "Show recent sales"`,
-                }
-              : msg
-          )
-        );
-      }
-    }, 700);
   };
 
   return (
     <div className="bg-[#0A0A0F] text-[#FAFAFA] relative min-h-screen overflow-hidden flex flex-col font-sans">
       {/* Background Graphic & Overlays */}
       <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.12] mix-blend-lighten"
+        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.08] mix-blend-lighten"
         style={{ backgroundImage: `url(${bgAsset.url})` }}
       />
       <div className="pointer-events-none absolute -top-80 left-1/4 h-[600px] w-[800px] rounded-full bg-[#E8D5B7]/5 blur-[140px]" />
       <div className="pointer-events-none absolute -bottom-80 right-1/4 h-[600px] w-[800px] rounded-full bg-[#A78BFA]/5 blur-[140px]" />
 
       {/* Header / Navbar */}
-      <header className="relative border-b border-white/[0.06] bg-[#111118]/75 backdrop-blur-xl px-6 py-4 flex items-center justify-between shrink-0">
+      <header className="relative border-b border-white/[0.06] bg-[#111118]/75 backdrop-blur-xl px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[0.02] shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-[#E8D5B7]">
@@ -549,278 +387,234 @@ function Index() {
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#E8D5B7]/30 to-transparent" />
       </header>
 
-      {/* Main Workspace */}
-      <main className="relative flex-1 overflow-hidden flex flex-col lg:flex-row max-w-7xl mx-auto w-full">
-        
-        {/* Left Side: Bot Chat Interaction */}
-        <section className="flex-1 flex flex-col border-r border-white/[0.06] min-h-0">
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-            <AnimatePresence initial={false}>
-              {messages.map((msg) => {
-                const isBot = msg.sender === "bot";
-                return (
-                  <motion.div 
-                    key={msg.id} 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className={`flex gap-4 ${isBot ? "" : "flex-row-reverse"}`}
-                  >
-                    <div
-                      className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                        isBot ? "bg-[#E8D5B7]/10 border-[#E8D5B7]/20 text-[#E8D5B7]" : "bg-white/5 border-white/10 text-white"
-                      }`}
-                    >
-                      {isBot ? <Bot className="h-4.5 w-4.5" /> : <User className="h-4.5 w-4.5" />}
-                    </div>
-
-                    <div className={`flex flex-col max-w-[85%] ${isBot ? "" : "items-end"}`}>
-                      {msg.loading ? (
-                        <div className="bg-[#16161E]/80 border border-white/10 rounded-2xl rounded-tl-sm p-1 backdrop-blur-md">
-                          <SkeletonLoader />
-                        </div>
-                      ) : (
-                        <div
-                          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line shadow-lg ${
-                            isBot
-                              ? "bg-[#16161E]/80 border border-white/10 text-[#FAFAFA] rounded-tl-sm backdrop-blur-md"
-                              : "bg-[#E8D5B7]/10 border border-[#E8D5B7]/20 text-white rounded-tr-sm"
-                          }`}
-                        >
-                          {msg.text}
-                        </div>
-                      )}
-
-                      {/* Rich Response Widgets */}
-                      {!msg.loading && msg.type === "cert" && msg.payload && (
-                        <CertAnalysisWidget result={msg.payload} />
-                      )}
-
-                      {!msg.loading && msg.type === "pack" && msg.payload && (
-                        <PackEVWidget data={msg.payload} />
-                      )}
-
-                      {!msg.loading && msg.type === "sales" && msg.payload && (
-                        <SalesWidget list={msg.payload} />
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-            
-            {isBotTyping && (
-              <div className="flex gap-4">
-                <div className="h-9 w-9 rounded-xl flex items-center justify-center bg-[#E8D5B7]/10 border border-[#E8D5B7]/20 text-[#E8D5B7]">
-                  <Bot className="h-4.5 w-4.5" />
-                </div>
-                <div className="bg-[#16161E]/80 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 text-sm flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 bg-[#E8D5B7] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="h-1.5 w-1.5 bg-[#E8D5B7] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="h-1.5 w-1.5 bg-[#E8D5B7] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Quick-Prompt suggestions */}
-          <div className="px-6 py-3 flex flex-wrap gap-2 shrink-0 border-t border-white/[0.04] bg-[#0A0A0F]/50">
-            <button
-              onClick={() => processCommand("Check cert 30060064")}
-              className="text-xs bg-white/[0.02] border border-white/10 hover:bg-white/5 hover:border-white/20 rounded-full px-3.5 py-1.5 transition-all text-[#A1A1AA] hover:text-white flex items-center gap-1.5"
-            >
-              <Search className="h-3 w-3 text-[#E8D5B7]" /> Cert #30060064
-            </button>
-            <button
-              onClick={() => processCommand("Analyze RenaCrypt expected value")}
-              className="text-xs bg-white/[0.02] border border-white/10 hover:bg-white/5 hover:border-white/20 rounded-full px-3.5 py-1.5 transition-all text-[#A1A1AA] hover:text-white flex items-center gap-1.5"
-            >
-              <Coins className="h-3 w-3 text-purple-400" /> RenaCrypt EV
-            </button>
-            <button
-              onClick={() => processCommand("Analyze OMEGA EV")}
-              className="text-xs bg-white/[0.02] border border-white/10 hover:bg-white/5 hover:border-white/20 rounded-full px-3.5 py-1.5 transition-all text-[#A1A1AA] hover:text-white flex items-center gap-1.5"
-            >
-              <Coins className="h-3 w-3 text-amber-400" /> OMEGA EV
-            </button>
-            <button
-              onClick={() => processCommand("Analyze Eden Pack expected value")}
-              className="text-xs bg-white/[0.02] border border-white/10 hover:bg-white/5 hover:border-white/20 rounded-full px-3.5 py-1.5 transition-all text-[#A1A1AA] hover:text-white flex items-center gap-1.5"
-            >
-              <Coins className="h-3 w-3 text-green-400" /> Eden Pack EV
-            </button>
-            <button
-              onClick={() => processCommand("Show recent sales")}
-              className="text-xs bg-white/[0.02] border border-white/10 hover:bg-white/5 hover:border-white/20 rounded-full px-3.5 py-1.5 transition-all text-[#A1A1AA] hover:text-white flex items-center gap-1.5"
-            >
-              <History className="h-3 w-3 text-blue-400" /> Recent Sales
-            </button>
-          </div>
-
-          {/* Chat Input */}
-          <div className="p-4 border-t border-white/[0.06] bg-[#111118]/45 shrink-0">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                processCommand(input);
-              }}
-              className="flex items-center gap-2 bg-[#16161E] border border-white/10 rounded-xl p-1.5 focus-within:border-[#E8D5B7]/40 focus-within:ring-1 focus-within:ring-[#E8D5B7]/10 transition-all"
-            >
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me to search, calculate or sync..."
-                className="flex-1 bg-transparent px-3 py-2 text-sm focus:outline-none placeholder:text-[#52525B]"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="h-9 w-9 grid place-items-center rounded-lg bg-[#E8D5B7] text-[#0A0A0F] hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30 transition-all cursor-pointer"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
-        </section>
-
-        {/* Right Side: Visual Dashboard Widgets */}
-        <section className="w-full lg:w-96 overflow-y-auto p-6 space-y-6 lg:block hidden shrink-0 bg-[#111118]/20">
-          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
-            <Sparkles className="h-4 w-4 text-[#E8D5B7]" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] font-heading">Real-time Dashboard</h2>
-          </div>
-
-          {/* Market Pulse Section */}
-          <MarketPulse totalListings={totalListings} avgGap={avgGap} lastSync={lastSync} />
-
-          {/* Pack EV Widgets */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-[#52525B] uppercase tracking-widest font-heading">Active Gacha Packs</h3>
-            
-            {salesLoading ? (
-              <div className="space-y-3">
-                <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
-                <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
-                <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {omegaEV && (
-                  <GlassCard interactive className="p-4" delay={0.05}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-sm font-heading">{omegaEV.pack_name}</div>
-                        <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
-                          Ratio: <span className={omegaEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{omegaEV.ev_ratio.toFixed(2)}x</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm text-[#E8D5B7]">
-                          <NumberCounter value={omegaEV.expected_value} prefix="$" />
-                        </div>
-                        <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${omegaEV.cost.toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <EVMeter cost={omegaEV.cost} expectedValue={omegaEV.expected_value} />
-                  </GlassCard>
-                )}
-
-                {renaEV && (
-                  <GlassCard interactive className="p-4" delay={0.1}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-sm font-heading">{renaEV.pack_name}</div>
-                        <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
-                          Ratio: <span className={renaEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{renaEV.ev_ratio.toFixed(2)}x</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm text-[#E8D5B7]">
-                          <NumberCounter value={renaEV.expected_value} prefix="$" />
-                        </div>
-                        <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${renaEV.cost.toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <EVMeter cost={renaEV.cost} expectedValue={renaEV.expected_value} />
-                  </GlassCard>
-                )}
-
-                {edenEV && (
-                  <GlassCard interactive className="p-4" delay={0.15}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-sm font-heading">{edenEV.pack_name}</div>
-                        <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
-                          Ratio: <span className={edenEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{edenEV.ev_ratio.toFixed(2)}x</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm text-[#E8D5B7]">
-                          <NumberCounter value={edenEV.expected_value} prefix="$" />
-                        </div>
-                        <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${edenEV.cost.toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <EVMeter cost={edenEV.cost} expectedValue={edenEV.expected_value} />
-                  </GlassCard>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Live Sales List */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-[#52525B] uppercase tracking-widest font-heading">Marketplace Activity</h3>
-            {salesLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3, 4].map((n) => (
-                  <div key={n} className="h-12 bg-white/5 animate-pulse rounded-xl" />
-                ))}
-              </div>
-            ) : recentSales.length > 0 ? (
-              <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                {recentSales.slice(0, 7).map((sale) => (
-                  <div 
-                    key={sale.id} 
-                    className="p-3 bg-[#16161E]/40 border border-white/5 hover:border-white/10 rounded-xl flex items-center justify-between gap-2 text-xs transition-all hover:-translate-y-0.5"
-                  >
-                    <div className="truncate space-y-0.5">
-                      <div className="font-semibold text-white truncate">{sale.card_name}</div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[#52525B] text-[10px] font-mono truncate">{sale.set_name || "Gacha"}</span>
-                        {sale.grade && <RarityBadge tier={sale.grade} />}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right space-y-0.5">
-                      <span className="font-mono text-white font-bold">${sale.ask_price.toFixed(2)}</span>
-                      <div className="flex justify-end">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                          sale.price_gap < -10.0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
-                          sale.price_gap > 10.0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
-                          "bg-white/5 text-[#A1A1AA] border border-white/10"
-                        }`}>
-                          {sale.price_gap < 0 ? "" : "+"}{sale.price_gap.toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-xs text-[#52525B] italic">No marketplace listings synchronized.</div>
-            )}
-          </div>
-
-          <div className="p-4 bg-[#E8D5B7]/5 border border-[#E8D5B7]/10 rounded-2xl flex gap-3 text-xs">
-            <Info className="h-4 w-4 text-[#E8D5B7] shrink-0 mt-0.5" />
-            <p className="text-[#A1A1AA] leading-relaxed">
-              All statistical models use conformal inference with 80% calibration bands. Live feedback updates every 2 mins.
+      {/* Main Workspace Scrollable Container */}
+      <div className="flex-1 overflow-y-auto z-5 px-6 py-8">
+        <div className="max-w-7xl mx-auto w-full space-y-8">
+          
+          {/* Hero Section & Search Bar */}
+          <section className="text-center max-w-2xl mx-auto space-y-4">
+            <h2 className="text-3xl font-extrabold font-heading text-white tracking-tight sm:text-4xl">
+              Graded Certificate Lookup
+            </h2>
+            <p className="text-[#A1A1AA] text-sm sm:text-base leading-relaxed">
+              Verify cert values instantly. Analyze conformal confidence intervals, ROI calculations, and market gap rates.
             </p>
-          </div>
-        </section>
-      </main>
+            
+            {/* Search Input Box */}
+            <div className="pt-2">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSearch(certInput);
+                }}
+                className="flex items-center gap-2 bg-[#16161E] border border-white/10 rounded-xl p-1.5 focus-within:border-[#E8D5B7]/40 focus-within:ring-1 focus-within:ring-[#E8D5B7]/10 transition-all max-w-lg mx-auto shadow-2xl"
+              >
+                <Search className="h-5 w-5 text-[#52525B] ml-3 shrink-0" />
+                <input
+                  value={certInput}
+                  onChange={(e) => setCertInput(e.target.value)}
+                  placeholder="Enter PSA/cert serial (e.g. 30060064)..."
+                  className="flex-1 bg-transparent px-2 py-2 text-sm focus:outline-none placeholder:text-[#52525B]"
+                />
+                <button
+                  type="submit"
+                  disabled={!certInput.trim() || searchLoading}
+                  className="px-5 py-2 text-xs font-bold rounded-lg bg-[#E8D5B7] text-[#0A0A0F] hover:opacity-90 disabled:opacity-30 disabled:hover:opacity-30 transition-all cursor-pointer flex items-center gap-1.5 font-heading"
+                >
+                  {searchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Search
+                </button>
+              </form>
+
+              {/* Suggestions */}
+              <div className="flex justify-center gap-2 mt-3 flex-wrap">
+                <span className="text-[11px] text-[#52525B] self-center">Suggestions:</span>
+                <button
+                  onClick={() => {
+                    setCertInput("30060064");
+                    handleSearch("30060064");
+                  }}
+                  className="text-[10px] bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/5 rounded-md px-2 py-1 text-[#A1A1AA] transition-colors"
+                >
+                  30060064
+                </button>
+                <button
+                  onClick={() => {
+                    setCertInput("60040082");
+                    handleSearch("60040082");
+                  }}
+                  className="text-[10px] bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/5 rounded-md px-2 py-1 text-[#A1A1AA] transition-colors"
+                >
+                  60040082
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* 3-Column Dashboard Layout Grid */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Column 1: Price Confidence Search Result */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <Info className="h-4 w-4 text-[#E8D5B7]" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] font-heading">Price Confidence</h3>
+              </div>
+
+              {searchLoading ? (
+                <SkeletonLoader />
+              ) : searchError ? (
+                <GlassCard className="p-5 border-red-500/20 bg-red-500/5 text-center">
+                  <div className="text-red-400 font-bold text-sm font-heading mb-1">Search Failed</div>
+                  <p className="text-xs text-[#A1A1AA] leading-relaxed">{searchError}</p>
+                </GlassCard>
+              ) : searchResult ? (
+                <CertAnalysisWidget result={searchResult} />
+              ) : (
+                <GlassCard className="p-8 text-center border-dashed border-white/10 bg-transparent">
+                  <Search className="h-8 w-8 text-[#52525B] mx-auto mb-3" />
+                  <div className="text-sm font-semibold text-white font-heading">No Certificate Loaded</div>
+                  <p className="text-xs text-[#52525B] mt-1.5 max-w-xs mx-auto leading-relaxed">
+                    Lookup a certification number in the search bar above to generate the Conformal inference prediction curve.
+                  </p>
+                </GlassCard>
+              )}
+            </div>
+
+            {/* Column 2: Pack Expected Value Cards */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <Coins className="h-4 w-4 text-purple-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] font-heading">Pack Expected Values</h3>
+              </div>
+
+              {salesLoading ? (
+                <div className="space-y-3">
+                  <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
+                  <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
+                  <div className="h-24 bg-white/5 animate-pulse rounded-xl" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {omegaEV && (
+                    <GlassCard interactive className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-sm font-heading">{omegaEV.pack_name}</div>
+                          <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
+                            Ratio: <span className={omegaEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{omegaEV.ev_ratio.toFixed(2)}x</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-sm text-[#E8D5B7]">
+                            <NumberCounter value={omegaEV.expected_value} prefix="$" />
+                          </div>
+                          <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${omegaEV.cost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <EVMeter cost={omegaEV.cost} expectedValue={omegaEV.expected_value} />
+                    </GlassCard>
+                  )}
+
+                  {renaEV && (
+                    <GlassCard interactive className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-sm font-heading">{renaEV.pack_name}</div>
+                          <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
+                            Ratio: <span className={renaEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{renaEV.ev_ratio.toFixed(2)}x</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-sm text-[#E8D5B7]">
+                            <NumberCounter value={renaEV.expected_value} prefix="$" />
+                          </div>
+                          <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${renaEV.cost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <EVMeter cost={renaEV.cost} expectedValue={renaEV.expected_value} />
+                    </GlassCard>
+                  )}
+
+                  {edenEV && (
+                    <GlassCard interactive className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-sm font-heading">{edenEV.pack_name}</div>
+                          <div className="text-[#A1A1AA] text-[10px] font-semibold mt-0.5">
+                            Ratio: <span className={edenEV.ev_ratio >= 1 ? "text-green-400" : "text-red-400"}>{edenEV.ev_ratio.toFixed(2)}x</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-sm text-[#E8D5B7]">
+                            <NumberCounter value={edenEV.expected_value} prefix="$" />
+                          </div>
+                          <div className="text-[#52525B] text-[9px] font-mono mt-0.5">Cost: ${edenEV.cost.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <EVMeter cost={edenEV.cost} expectedValue={edenEV.expected_value} />
+                    </GlassCard>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Column 3: Recent Sales Feed & Live Statistics */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                <History className="h-4 w-4 text-blue-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] font-heading">Recent Sales Activity</h3>
+              </div>
+
+              {/* Aggregated Pulse Info */}
+              <MarketPulse totalListings={totalListings} avgGap={avgGap} lastSync={lastSync} />
+
+              {salesLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <div key={n} className="h-12 bg-white/5 animate-pulse rounded-xl" />
+                  ))}
+                </div>
+              ) : recentSales.length > 0 ? (
+                <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+                  {recentSales.map((sale) => (
+                    <div 
+                      key={sale.id} 
+                      className="p-3 bg-[#16161E]/40 border border-white/5 hover:border-white/10 rounded-xl flex items-center justify-between gap-2 text-xs transition-all duration-200 hover:-translate-y-0.5"
+                    >
+                      <div className="truncate space-y-0.5">
+                        <div className="font-semibold text-white truncate">{sale.card_name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[#52525B] text-[10px] font-mono truncate">{sale.set_name || "Gacha"}</span>
+                          {sale.grade && <RarityBadge tier={sale.grade} />}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right space-y-0.5">
+                        <span className="font-mono text-white font-bold">${sale.ask_price.toFixed(2)}</span>
+                        <div className="flex justify-end">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            sale.price_gap < -10.0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
+                            sale.price_gap > 10.0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
+                            "bg-white/5 text-[#A1A1AA] border border-white/10"
+                          }`}>
+                            {sale.price_gap < 0 ? "" : "+"}{sale.price_gap.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-[#52525B] italic text-center p-6 bg-white/[0.01] border border-white/5 rounded-xl">
+                  No marketplace listings synchronized yet. Click refresh to sync.
+                </div>
+              )}
+            </div>
+
+          </section>
+
+        </div>
+      </div>
     </div>
   );
 }
@@ -839,13 +633,13 @@ function CertAnalysisWidget({ result }: { result: SearchResult }) {
   const highPct = rangeMax > rangeMin ? 100 - ((rangeMax - high) / (rangeMax - rangeMin)) * 100 : 80;
 
   return (
-    <GlassCard className="mt-3 p-5 w-full bg-[#16161E]/60 max-w-xl">
+    <GlassCard className="p-5 w-full bg-[#16161E]/60">
       <div className="flex items-center justify-between border-b border-white/5 pb-3">
-        <div>
-          <h4 className="font-bold text-white text-sm font-heading">{result.card_name}</h4>
-          <span className="text-[#A1A1AA] text-[10px] font-semibold">{result.set_name || "Renaiss Collectibles"}</span>
+        <div className="truncate pr-2">
+          <h4 className="font-bold text-white text-sm font-heading truncate">{result.card_name}</h4>
+          <span className="text-[#A1A1AA] text-[10px] font-semibold truncate block">{result.set_name || "Renaiss Collectibles"}</span>
         </div>
-        <span className="bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#22C55E] text-[9px] font-bold uppercase tracking-wider rounded-full px-2.5 py-0.5">
+        <span className="bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#22C55E] text-[9px] font-bold uppercase tracking-wider rounded-full px-2.5 py-0.5 shrink-0">
           {result.method === "conformal" ? "Conformal Inference" : result.method}
         </span>
       </div>
@@ -905,91 +699,6 @@ function CertAnalysisWidget({ result }: { result: SearchResult }) {
             <RarityBadge tier={result.grade} />
           </div>
         )}
-      </div>
-    </GlassCard>
-  );
-}
-
-function PackEVWidget({ data }: { data: PackEVResult }) {
-  const isPositive = data.verdict === "Positive EV";
-  return (
-    <GlassCard className={`mt-3 p-5 w-full max-w-md border-l-4 ${isPositive ? "border-l-green-500" : "border-l-red-500"}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-bold text-white text-sm font-heading tracking-wide uppercase">{data.pack_name}</h4>
-        <span className={`text-[9px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-md border ${
-          isPositive ? "border-green-500/30 bg-green-500/10 text-green-400 shadow-[0_0_8px_rgba(34,197,94,0.15)]" : "border-red-500/30 bg-red-500/10 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.15)]"
-        }`}>
-          {data.verdict}
-        </span>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-[#A1A1AA]">Pack Purchase Cost</span>
-          <span className="font-mono text-white font-semibold">${data.cost.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-[#A1A1AA]">Expected Value</span>
-          <span className="font-mono text-[#E8D5B7] font-bold">
-            <NumberCounter value={data.expected_value} prefix="$" />
-          </span>
-        </div>
-        <div className="flex justify-between items-center text-xs border-t border-white/5 pt-2">
-          <span className="text-[#A1A1AA]">ROI Factor</span>
-          <span className={`font-mono font-bold flex items-center gap-1 ${isPositive ? "text-green-400" : "text-red-400"}`}>
-            {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-            {data.ev_ratio.toFixed(2)}x
-          </span>
-        </div>
-      </div>
-
-      <EVMeter cost={data.cost} expectedValue={data.expected_value} />
-
-      <div className="mt-3 text-[10px] text-[#52525B] font-mono text-right">
-        Based on {data.cards_fetched}/{data.cards_total} card price points.
-      </div>
-    </GlassCard>
-  );
-}
-
-function SalesWidget({ list }: { list: RecentSale[] }) {
-  return (
-    <GlassCard className="mt-3 p-4 w-full bg-[#16161E]/60 max-w-xl border-white/10">
-      <div className="text-xs font-bold text-white uppercase tracking-wider mb-3 flex items-center justify-between border-b border-white/5 pb-2">
-        <span className="font-heading">Marketplace Live Deals</span>
-        <span className="text-[10px] text-[#52525B] font-normal">showing top 3</span>
-      </div>
-      <div className="space-y-2.5">
-        {list.slice(0, 3).map((item) => {
-          const isUnder = item.verdict === "Underpriced";
-          const isOver = item.verdict === "Overpriced";
-          return (
-            <div key={item.id} className="p-3 bg-white/[0.01] border border-white/5 rounded-xl flex items-center justify-between gap-3">
-              <div className="truncate space-y-0.5">
-                <div className="text-xs font-semibold text-white truncate">{item.card_name}</div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-[#52525B] font-mono truncate">{item.set_name || "Gacha"}</span>
-                  {item.grade && <RarityBadge tier={item.grade} />}
-                </div>
-              </div>
-              <div className="text-right shrink-0 flex items-center gap-3">
-                <div>
-                  <div className="text-xs font-mono font-bold text-white">
-                    <NumberCounter value={item.ask_price} prefix="$" />
-                  </div>
-                  <div className="text-[9px] text-[#52525B] font-mono">FMV: ${item.fmv}</div>
-                </div>
-                <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded ${
-                  isUnder ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
-                  isOver ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
-                  "bg-white/5 text-[#A1A1AA] border border-white/10"
-                }`}>
-                  {item.verdict}
-                </span>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </GlassCard>
   );
