@@ -61,7 +61,10 @@ async def lifespan(_app: FastAPI):
     data is instead fetched on-demand by the /recent-sales endpoint the
     first time it is called after a cold start.
     """
-    await init_db()  # Create tables on first run (idempotent).
+    try:
+        await init_db()  # Create tables on first run (idempotent).
+    except Exception as exc:
+        log.error("init_db() failed during startup — DB features will be unavailable: %s", exc)
     yield
     # Tear down shared resources on shutdown.
     await close_client()

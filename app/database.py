@@ -32,15 +32,6 @@ load_dotenv(_ENV_FILE)
 
 # ── Connection factory ────────────────────────────────────────────────
 
-TURSO_DATABASE_URL: str = os.getenv("TURSO_DATABASE_URL", "")
-TURSO_AUTH_TOKEN: str = os.getenv("TURSO_AUTH_TOKEN", "")
-
-if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
-    raise EnvironmentError(
-        "Missing Turso credentials. Set TURSO_DATABASE_URL and "
-        "TURSO_AUTH_TOKEN in your .env file or environment."
-    )
-
 
 def _get_client() -> libsql_client.Client:
     """Return a new libsql_client.Client for a single operation.
@@ -48,13 +39,26 @@ def _get_client() -> libsql_client.Client:
     The Turso dashboard shows ``libsql://`` URLs, but the Python client's
     HTTP transport requires ``https://``.  We normalise the scheme here so
     the env-var value can be copy-pasted verbatim from the dashboard.
+
+    Environment variables are read lazily (not at import time) so the
+    module can be safely imported even when credentials are absent — e.g.
+    during Vercel's build/bundling phase.
     """
-    url = TURSO_DATABASE_URL
+    db_url = os.getenv("TURSO_DATABASE_URL", "")
+    auth_token = os.getenv("TURSO_AUTH_TOKEN", "")
+
+    if not db_url or not auth_token:
+        raise EnvironmentError(
+            "Missing Turso credentials. Set TURSO_DATABASE_URL and "
+            "TURSO_AUTH_TOKEN in your .env file or Vercel environment variables."
+        )
+
+    url = db_url
     if url.startswith("libsql://"):
         url = "https://" + url[len("libsql://"):]
     return libsql_client.create_client(
         url=url,
-        auth_token=TURSO_AUTH_TOKEN,
+        auth_token=auth_token,
     )
 
 
