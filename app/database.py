@@ -569,3 +569,15 @@ async def get_recent_marketplace_listings(
         )
         for row in result.rows
     ]
+
+
+async def get_recent_distinct_certs(limit: int = 3) -> list[str]:
+    """Retrieve the most recently tracked unique cert numbers, newest first."""
+    async with _get_client() as client:
+        # Group by cert to make it distinct, and order by the newest fetched_at
+        result = await client.execute(
+            "SELECT cert FROM cards GROUP BY cert ORDER BY MAX(fetched_at) DESC LIMIT ?",
+            [limit],
+        )
+    return [row[0] for row in result.rows]
+

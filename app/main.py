@@ -15,10 +15,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-from app.database import close_db, get_recent_marketplace_listings, init_db, save_card_price
+from app.database import close_db, get_recent_marketplace_listings, init_db, save_card_price, get_recent_distinct_certs
 from app.inference import get_price_interval
 from app.pack_ev import calculate_all_packs_ev, list_packs
 from app.renaiss_service import close_client, search_by_cert
+from app.background_job import sync_marketplace_listings
 
 
 # ── Simple TTL Cache ──────────────────────────────────────────────────
@@ -258,6 +259,17 @@ async def packs():
     return list_packs()
 
 
+@app.get("/suggestions")
+async def suggestions():
+    """Return 2-3 recently tracked distinct cert numbers."""
+    try:
+        certs = await get_recent_distinct_certs(limit=3)
+        return certs
+    except Exception as exc:
+        log.error("Failed to fetch suggestions: %s", exc)
+        return []
+
+
 @app.get("/recent-sales")
 async def recent_sales():
     """Return the last 20 marketplace listings with price-gap analysis.
@@ -271,6 +283,28 @@ async def recent_sales():
         return cached
 
     rows = await get_recent_marketplace_listings(limit=20)
+
+    # Perform on-demand fetch if no data exists or data is older than 5 minutes
+    from datetime import datetime, timezone
+    need_sync = False
+    if not rows:
+        need_sync = True
+    else:
+        newest = rows[0]
+        if newest.fetched_at:
+            delta = (datetime.now(timezone.utc) - newest.fetched_at).total_seconds()
+            if delta > 300:
+                need_sync = True
+        else:
+            need_sync = True
+
+    if need_sync:
+        log.info("On-demand marketplace sync triggered (data missing or older than 5 mins)")
+        try:
+            await sync_marketplace_listings()
+            rows = await get_recent_marketplace_listings(limit=20)
+        except Exception as exc:
+            log.error("On-demand marketplace sync failed: %s", exc)
 
     def verdict(gap: float) -> str:
         if gap > 10.0:

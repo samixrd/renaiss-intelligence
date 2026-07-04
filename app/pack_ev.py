@@ -16,7 +16,7 @@ from app.database import check_cert_exists, save_card_price
 
 log = logging.getLogger(__name__)
 
-RENAISS_API_BASE = "https://api.renaissos.com"
+RENAISS_API_BASE = "https://api.renaiss.xyz"
 
 # ── EV Modeling Configuration ─────────────────────────────────────────
 
@@ -81,7 +81,7 @@ PACK_METADATA = {
 async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
     """Fetch recent pack opens from the Renaiss Index API and persist them.
 
-    Calls **GET /v1/packs/{pack_slug}/recent-opens** directly instead of
+    Calls **GET /v0/packs/{pack_slug}** directly instead of
     using the ``npx renaiss packs`` CLI, which is unavailable on Vercel
     serverless.  Falls back to an empty list on any error so the static
     probability-model EV is still returned.
@@ -89,13 +89,13 @@ async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
     Returns
     -------
     list[dict]
-        List of parsed pull dicts representing the raw cards pulled.
+         List of parsed pull dicts representing the raw cards pulled.
     """
     if pack_slug not in PACK_METADATA:
         log.error("Unknown pack slug for pulls fetch: %s", pack_slug)
         return []
 
-    url = f"{RENAISS_API_BASE}/v1/packs/{pack_slug}/recent-opens"
+    url = f"{RENAISS_API_BASE}/v0/packs/{pack_slug}"
     log.info("Fetching recent pulls from API: GET %s", url)
 
     try:
@@ -193,9 +193,35 @@ async def calculate_pack_ev(pack_name: str) -> dict:
     cards_fetched = len(pulls)
     cards_total = len(pulls)
 
-    expected_value = meta["expected_value"]
     cost = meta["cost"]
+    
+    if pulls:
+        fmv_sum = 0.0
+        for pull in pulls:
+            raw_fmv = float(pull.get("fmv", 0))
+            fmv_usd = raw_fmv / 100.0
+            fmv_sum += fmv_usd
+        expected_value = fmv_sum / len(pulls)
+    else:
+        expected_value = meta["expected_value"]
+        
     ev_ratio = expected_value / cost
+
+    # Extract Top 3 highest-FMV pulls as Recent Notable Pulls
+    notable_pulls = []
+    if pulls:
+        sorted_pulls = sorted(pulls, key=lambda x: float(x.get("fmv", 0)), reverse=True)
+        for pull in sorted_pulls[:3]:
+            raw_fmv = float(pull.get("fmv", 0))
+            fmv_usd = raw_fmv / 100.0
+            token_id = pull.get("collectibleTokenId", "")
+            tier = pull.get("tier", "C")
+            notable_pulls.append({
+                "token_id": token_id,
+                "fmv": fmv_usd,
+                "tier": tier,
+                "marketplace_url": f"https://www.renaiss.xyz/marketplace/{token_id}" if token_id else None
+            })
 
     return {
         "pack_name": meta["name"],
@@ -206,6 +232,7 @@ async def calculate_pack_ev(pack_name: str) -> dict:
         "cards_fetched": cards_fetched,
         "cards_total": cards_total,
         "rarity_breakdown": meta["rarity_breakdown"],
+        "recent_notable_pulls": notable_pulls,
     }
 
 

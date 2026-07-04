@@ -36,6 +36,12 @@ export interface PackEVResult {
   verdict: "Positive EV" | "Below EV";
   cards_fetched: number;
   cards_total: number;
+  recent_notable_pulls?: Array<{
+    token_id: string;
+    fmv: number;
+    tier: string;
+    marketplace_url: string | null;
+  }>;
 }
 
 /** Shape returned by GET /recent-sales (marketplace_listings table) */
@@ -100,4 +106,8 @@ export async function fetchPackEV(pack: string): Promise<PackEVResult> {
 
 export function fetchRecentSales(): Promise<RecentSale[]> {
   return get<RecentSale[]>("/recent-sales");
+}
+
+export function fetchSuggestions(): Promise<string[]> {
+  return get<string[]>("/suggestions");
 }

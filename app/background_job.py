@@ -21,7 +21,7 @@ from app.database import (
 )
 from app.pack_ev import fetch_recent_pulls
 
-RENAISS_API_BASE = "https://api.renaissos.com"
+RENAISS_API_BASE = "https://api.renaiss.xyz"
 
 log = logging.getLogger(__name__)
 
@@ -31,11 +31,11 @@ scheduler = AsyncIOScheduler()
 async def _fetch_marketplace_items(offset: int = 0) -> list[dict]:
     """Fetch marketplace listings directly from the Renaiss Index API.
 
-    Calls GET /v1/marketplace?offset=<offset> and returns the
+    Calls GET /v0/marketplace?offset=<offset> and returns the
     ``collection`` list from the JSON response.  Falls back to an empty
     list and logs the error so callers can continue gracefully.
     """
-    url = f"{RENAISS_API_BASE}/v1/marketplace"
+    url = f"{RENAISS_API_BASE}/v0/marketplace"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(url, params={"offset": offset})

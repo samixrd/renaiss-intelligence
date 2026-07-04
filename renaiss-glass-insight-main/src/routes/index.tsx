@@ -22,6 +22,7 @@ import {
   searchByCert,
   fetchPackEV,
   fetchRecentSales,
+  fetchSuggestions,
   type SearchResult,
   type PackEVResult,
   type RecentSale,
@@ -288,6 +289,9 @@ function Index() {
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showBanner, setShowBanner] = useState(true);
 
   // Side dashboard stats
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
@@ -326,20 +330,33 @@ function Index() {
 
   useEffect(() => {
     loadDashboardData();
+    fetchSuggestions().then(setSuggestions).catch(() => {});
+    const dismissed = localStorage.getItem("beta-banner-dismissed");
+    if (dismissed === "true") {
+      setShowBanner(false);
+    }
   }, [loadDashboardData]);
 
-  // Action: Search Cert
+  // Action: Search PSA Cert
   const handleSearch = async (certNum: string) => {
     const trimmed = certNum.trim();
     if (!trimmed) return;
+    setValidationError(null);
     setSearchLoading(true);
     setSearchError(null);
     setSearchResult(null);
+    
+    if (!/^PSA\d+$/i.test(trimmed)) {
+      setValidationError("Only PSA certificates are currently supported.");
+      setSearchLoading(false);
+      return;
+    }
+
     try {
-      const res = await searchByCert(trimmed);
+      const res = await searchByCert(trimmed.toUpperCase());
       setSearchResult(res);
     } catch (err: any) {
-      setSearchError(err.message || "Cert not found or error fetching data. Please ensure your backend config is correct.");
+      setSearchError(err.message || "PSA cert not found or error fetching data. Please ensure your backend config is correct.");
     } finally {
       setSearchLoading(false);
     }
@@ -387,6 +404,27 @@ function Index() {
         <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#E8D5B7]/30 to-transparent" />
       </header>
 
+      {/* Beta Warning Banner */}
+      {showBanner && (
+        <div className="mx-6 mt-4 p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-200/95 shadow-md shrink-0">
+          <div className="flex items-center gap-2.5">
+            <Info className="h-4 w-4 text-amber-500 shrink-0" />
+            <span>
+              Data sourced from Renaiss CLI and Index API (beta). Some data may be incomplete, missing, delayed, or still being updated. All outputs are experimental references, not final verified market facts.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              localStorage.setItem("beta-banner-dismissed", "true");
+              setShowBanner(false);
+            }}
+            className="text-[#A1A1AA] hover:text-white text-[10px] font-bold px-2 py-1 rounded bg-white/5 hover:bg-white/10 transition-all shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Main Workspace Scrollable Container */}
       <div className="flex-1 overflow-y-auto z-5 px-6 py-8">
         <div className="max-w-7xl mx-auto w-full space-y-8">
@@ -394,10 +432,10 @@ function Index() {
           {/* Hero Section & Search Bar */}
           <section className="text-center max-w-2xl mx-auto space-y-4">
             <h2 className="text-3xl font-extrabold font-heading text-white tracking-tight sm:text-4xl">
-              Graded Certificate Lookup
+              Graded PSA Cert Lookup
             </h2>
             <p className="text-[#A1A1AA] text-sm sm:text-base leading-relaxed">
-              Verify cert values instantly. Analyze conformal confidence intervals, ROI calculations, and market gap rates.
+              Verify PSA cert values instantly. Analyze conformal confidence intervals, ROI calculations, and market gap rates.
             </p>
             
             {/* Search Input Box */}
@@ -412,8 +450,11 @@ function Index() {
                 <Search className="h-5 w-5 text-[#52525B] ml-3 shrink-0" />
                 <input
                   value={certInput}
-                  onChange={(e) => setCertInput(e.target.value)}
-                  placeholder="Enter PSA/cert serial (e.g. 30060064)..."
+                  onChange={(e) => {
+                    setCertInput(e.target.value);
+                    setValidationError(null);
+                  }}
+                  placeholder="Enter PSA cert number (e.g. PSA151238633)..."
                   className="flex-1 bg-transparent px-2 py-2 text-sm focus:outline-none placeholder:text-[#52525B]"
                 />
                 <button
@@ -426,28 +467,30 @@ function Index() {
                 </button>
               </form>
 
+              {validationError && (
+                <div className="text-amber-500 text-xs mt-2 font-semibold text-center">
+                  {validationError}
+                </div>
+              )}
+
               {/* Suggestions */}
-              <div className="flex justify-center gap-2 mt-3 flex-wrap">
-                <span className="text-[11px] text-[#52525B] self-center">Suggestions:</span>
-                <button
-                  onClick={() => {
-                    setCertInput("30060064");
-                    handleSearch("30060064");
-                  }}
-                  className="text-[10px] bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/5 rounded-md px-2 py-1 text-[#A1A1AA] transition-colors"
-                >
-                  30060064
-                </button>
-                <button
-                  onClick={() => {
-                    setCertInput("60040082");
-                    handleSearch("60040082");
-                  }}
-                  className="text-[10px] bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/5 rounded-md px-2 py-1 text-[#A1A1AA] transition-colors"
-                >
-                  60040082
-                </button>
-              </div>
+              {suggestions && suggestions.length > 0 && (
+                <div className="flex justify-center gap-2 mt-3 flex-wrap">
+                  <span className="text-[11px] text-[#52525B] self-center">Suggestions:</span>
+                  {suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => {
+                        setCertInput(suggestion);
+                        handleSearch(suggestion);
+                      }}
+                      className="text-[10px] bg-white/[0.02] border border-white/5 hover:border-white/20 hover:bg-white/5 rounded-md px-2 py-1 text-[#A1A1AA] transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
 
@@ -473,9 +516,9 @@ function Index() {
               ) : (
                 <GlassCard className="p-8 text-center border-dashed border-white/10 bg-transparent">
                   <Search className="h-8 w-8 text-[#52525B] mx-auto mb-3" />
-                  <div className="text-sm font-semibold text-white font-heading">No Certificate Loaded</div>
+                  <div className="text-sm font-semibold text-white font-heading">No PSA Cert Loaded</div>
                   <p className="text-xs text-[#52525B] mt-1.5 max-w-xs mx-auto leading-relaxed">
-                    Lookup a certification number in the search bar above to generate the Conformal inference prediction curve.
+                    Lookup a PSA cert number in the search bar above to generate the Conformal inference prediction curve.
                   </p>
                 </GlassCard>
               )}
@@ -513,6 +556,34 @@ function Index() {
                         </div>
                       </div>
                       <EVMeter cost={omegaEV.cost} expectedValue={omegaEV.expected_value} />
+                      {omegaEV.recent_notable_pulls && omegaEV.recent_notable_pulls.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                          <div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider font-semibold">Recent Notable Pulls</div>
+                          <div className="space-y-1">
+                            {omegaEV.recent_notable_pulls.map((pull) => (
+                              <div key={pull.token_id} className="flex justify-between items-center text-[10px]">
+                                <span className="text-[#A1A1AA] truncate pr-2">
+                                  #{pull.token_id.slice(0, 8)}...{pull.token_id.slice(-8)}
+                                  <span className="ml-1 text-[8px] uppercase px-1 bg-white/5 border border-white/5 rounded text-[#A1A1AA]">{pull.tier}</span>
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-mono text-[#E8D5B7] font-semibold">${pull.fmv.toFixed(2)}</span>
+                                  {pull.marketplace_url && (
+                                    <a
+                                      href={pull.marketplace_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-400 hover:underline flex items-center gap-0.5"
+                                    >
+                                      View <ArrowRight className="h-2.5 w-2.5 inline" />
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </GlassCard>
                   )}
 
@@ -533,6 +604,34 @@ function Index() {
                         </div>
                       </div>
                       <EVMeter cost={renaEV.cost} expectedValue={renaEV.expected_value} />
+                      {renaEV.recent_notable_pulls && renaEV.recent_notable_pulls.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5">
+                          <div className="text-[10px] text-[#A1A1AA] uppercase tracking-wider font-semibold">Recent Notable Pulls</div>
+                          <div className="space-y-1">
+                            {renaEV.recent_notable_pulls.map((pull) => (
+                              <div key={pull.token_id} className="flex justify-between items-center text-[10px]">
+                                <span className="text-[#A1A1AA] truncate pr-2">
+                                  #{pull.token_id.slice(0, 8)}...{pull.token_id.slice(-8)}
+                                  <span className="ml-1 text-[8px] uppercase px-1 bg-white/5 border border-white/5 rounded text-[#A1A1AA]">{pull.tier}</span>
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-mono text-[#E8D5B7] font-semibold">${pull.fmv.toFixed(2)}</span>
+                                  {pull.marketplace_url && (
+                                    <a
+                                      href={pull.marketplace_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-400 hover:underline flex items-center gap-0.5"
+                                    >
+                                      View <ArrowRight className="h-2.5 w-2.5 inline" />
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </GlassCard>
                   )}
 
