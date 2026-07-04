@@ -169,14 +169,14 @@ The frontend will be available at `http://localhost:5173`.
 
 | Service | URL |
 |---------|-----|
-| **Frontend** | `[add Vercel URL]` |
-| **Backend API** | `[add Vercel URL]` |
+| **Frontend** | `[https://renaiss-intelligence-frontend.vercel.app/]` |
+| **Backend API** | `[https://renaiss-glass-insight-main.vercel.app/]` |
 
 ---
 
 ## 👥 Team
 
-**[Your name / team name]**
+**[Spellman]**
 
 ---
 
