@@ -126,6 +126,7 @@ async def warmup():
         sales = [
             {
                 "id": row.id,
+                "token_id": row.token_id,
                 "card_name": row.card_name,
                 "set_name": row.set_name,
                 "year": row.year,
@@ -138,7 +139,7 @@ async def warmup():
             }
             for row in rows
         ]
-        cache.set("recent-sales", sales, 120)
+        cache.set("recent-sales", sales, 900)  # 15-minute TTL
         log.info("Warmup: cached %d recent-sales rows", len(sales))
     except Exception as exc:
         log.error("Warmup failed: %s", exc)
@@ -198,6 +199,8 @@ async def search(cert: str = Query(..., description="Certification number")):
             "high": interval["high"],
             "confidence": interval["confidence"],
             "method": interval["method"],
+            "n_samples": interval.get("n_samples", 0),
+            "calibrated_at": interval.get("calibrated_at"),
             "confidence_tier": api_result["confidence_tier"],
             "freshness_days": api_result["freshness_days"],
         }
@@ -316,6 +319,7 @@ async def recent_sales():
     results = [
         {
             "id": row.id,
+            "token_id": row.token_id,
             "card_name": row.card_name,
             "set_name": row.set_name,
             "year": row.year,
@@ -328,5 +332,5 @@ async def recent_sales():
         }
         for row in rows
     ]
-    cache.set("recent-sales", results, 120)
+    cache.set("recent-sales", results, 900)  # 15-minute TTL
     return results

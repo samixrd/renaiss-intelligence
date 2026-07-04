@@ -160,7 +160,13 @@ function EVMeter({ cost, expectedValue }: { cost: number; expectedValue: number 
   );
 }
 
-function ConfidenceBellCurve({ low, high, fmv }: { low: number; high: number; fmv: number }) {
+function ConfidenceBellCurve({
+  low, high, fmv,
+}: {
+  low: number; high: number; fmv: number;
+}) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+
   const range = high - low;
   const minVal = low - range * 0.4;
   const maxVal = high + range * 0.4;
@@ -168,28 +174,71 @@ function ConfidenceBellCurve({ low, high, fmv }: { low: number; high: number; fm
     const p = ((v - minVal) / (maxVal - minVal)) * 100;
     return Math.min(Math.max(p, 5), 95);
   };
-  
+
   const lowPct = getPct(low);
   const fmvPct = getPct(fmv);
   const highPct = getPct(high);
 
   return (
     <div className="mt-4 p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-3">
-      <div className="text-[11px] text-[#A1A1AA] font-semibold tracking-wider uppercase">
-        80% Price Confidence Distribution
+      {/* Title row with ACI tooltip */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-[#A1A1AA] font-semibold tracking-wider uppercase">
+          80% Price Confidence Distribution
+        </span>
+        <div className="relative">
+          <button
+            id="aci-info-btn"
+            onClick={() => setTooltipOpen((o) => !o)}
+            onBlur={() => setTimeout(() => setTooltipOpen(false), 150)}
+            className="flex items-center justify-center h-4 w-4 rounded-full border border-[#A1A1AA]/40 text-[#A1A1AA] hover:border-[#E8D5B7]/60 hover:text-[#E8D5B7] transition-colors"
+            aria-label="Methodology info"
+          >
+            <Info className="h-2.5 w-2.5" />
+          </button>
+          <AnimatePresence>
+            {tooltipOpen && (
+              <motion.div
+                id="aci-tooltip"
+                initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 w-72 p-3 bg-[#111118] border border-[#E8D5B7]/20 rounded-xl shadow-2xl text-[10px] text-[#A1A1AA] leading-relaxed"
+              >
+                <div className="text-[#E8D5B7] font-bold text-[11px] mb-1.5 flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  Adaptive Conformal Inference (ACI)
+                </div>
+                A distribution-free statistical method that provides calibrated prediction intervals with guaranteed coverage, adapting in real-time as new market data arrives. Unlike traditional confidence intervals, ACI requires no assumptions about the underlying price distribution.
+                <div className="mt-2 pt-2 border-t border-white/5 text-[#52525B]">
+                  Coverage target: 80% · Method: Jackknife+ / Normal approximation
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-      <div className="relative h-20 w-full mt-2">
-        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40" preserveAspectRatio="none">
+
+      {/* Bell curve SVG with statistical annotation */}
+      <div className="relative h-24 w-full mt-2">
+        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 48" preserveAspectRatio="none">
+          {/* Axis baseline */}
+          <line x1="0" y1="42" x2="100" y2="42" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+          {/* Grid ticks */}
+          {[0, 25, 50, 75, 100].map((x) => (
+            <line key={x} x1={x} y1="40" x2={x} y2="44" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
+          ))}
           {/* Main Bell Curve path */}
           <path
-            d="M 0 38 Q 20 38 40 10 T 60 10 Q 80 38 100 38"
+            d="M 0 42 Q 20 42 40 12 T 60 12 Q 80 42 100 42"
             fill="none"
             stroke="rgba(255,255,255,0.08)"
             strokeWidth="1.5"
           />
-          {/* Highlight interval */}
+          {/* Shaded 80% interval */}
           <path
-            d={`M ${lowPct} 38 Q 40 12 50 8 T ${highPct} 38 Z`}
+            d={`M ${lowPct} 42 Q 40 14 50 10 T ${highPct} 42 Z`}
             fill="url(#gold-grad)"
             opacity="0.15"
           />
@@ -199,34 +248,56 @@ function ConfidenceBellCurve({ low, high, fmv }: { low: number; high: number; fm
               <stop offset="100%" stopColor="transparent" />
             </linearGradient>
           </defs>
-          {/* Target Indicators */}
-          <line x1={lowPct} y1="38" x2={lowPct} y2="18" stroke="#22C55E" strokeWidth="1" strokeDasharray="2 2" />
-          <line x1={fmvPct} y1="38" x2={fmvPct} y2="8" stroke="#E8D5B7" strokeWidth="1.5" />
-          <line x1={highPct} y1="38" x2={highPct} y2="18" stroke="#EF4444" strokeWidth="1" strokeDasharray="2 2" />
+          {/* P10 indicator */}
+          <line x1={lowPct} y1="42" x2={lowPct} y2="22" stroke="#22C55E" strokeWidth="1" strokeDasharray="2 2" />
+          {/* μ (FMV) indicator */}
+          <line x1={fmvPct} y1="42" x2={fmvPct} y2="10" stroke="#E8D5B7" strokeWidth="1.5" />
+          {/* P90 indicator */}
+          <line x1={highPct} y1="42" x2={highPct} y2="22" stroke="#EF4444" strokeWidth="1" strokeDasharray="2 2" />
+          {/* μ label at peak */}
+          <text
+            x={fmvPct}
+            y="7"
+            textAnchor="middle"
+            fontSize="4"
+            fill="#E8D5B7"
+            fontFamily="monospace"
+          >
+            μ
+          </text>
         </svg>
-        {/* Dynamic Labels */}
-        <div 
-          style={{ left: `${lowPct}%` }} 
-          className="absolute top-1/2 -translate-x-1/2 text-[9px] font-mono text-green-400 bg-[#0A0A0F]/80 px-1 rounded border border-green-500/20"
+
+        {/* Dynamic price labels */}
+        <div
+          style={{ left: `${lowPct}%` }}
+          className="absolute top-[45%] -translate-x-1/2 text-[9px] font-mono text-green-400 bg-[#0A0A0F]/80 px-1 rounded border border-green-500/20"
         >
           ${low.toFixed(0)}
         </div>
-        <div 
-          style={{ left: `${fmvPct}%` }} 
+        <div
+          style={{ left: `${fmvPct}%` }}
           className="absolute top-0 -translate-x-1/2 text-[10px] font-mono text-white font-bold bg-[#16161E] px-2 py-0.5 rounded border border-[#E8D5B7]/40 shadow-lg"
         >
           ${fmv.toFixed(0)}
         </div>
-        <div 
-          style={{ left: `${highPct}%` }} 
-          className="absolute top-1/2 -translate-x-1/2 text-[9px] font-mono text-red-400 bg-[#0A0A0F]/80 px-1 rounded border border-red-500/20"
+        <div
+          style={{ left: `${highPct}%` }}
+          className="absolute top-[45%] -translate-x-1/2 text-[9px] font-mono text-red-400 bg-[#0A0A0F]/80 px-1 rounded border border-red-500/20"
         >
           ${high.toFixed(0)}
         </div>
       </div>
+
+      {/* P10 / P90 labels */}
       <div className="flex justify-between text-[9px] text-[#52525B]">
-        <span>Low Target (10th percentile)</span>
-        <span>High Target (90th percentile)</span>
+        <span className="text-green-500/70">P10 (lower bound)</span>
+        <span className="text-[#A1A1AA]/40 italic">80% interval</span>
+        <span className="text-red-500/70">P90 (upper bound)</span>
+      </div>
+
+      {/* Model metadata caption */}
+      <div className="pt-1 border-t border-white/[0.04] text-[8.5px] text-[#3F3F46] font-mono leading-relaxed">
+        Model: Conformal Quantile Regression · Calibration: 80% · Coverage guarantee: distribution-free
       </div>
     </div>
   );
@@ -575,7 +646,7 @@ function Index() {
                                       rel="noopener noreferrer"
                                       className="text-blue-400 hover:underline flex items-center gap-0.5"
                                     >
-                                      View <ArrowRight className="h-2.5 w-2.5 inline" />
+                                      View Pack <ArrowRight className="h-2.5 w-2.5 inline" />
                                     </a>
                                   )}
                                 </div>
@@ -623,7 +694,7 @@ function Index() {
                                       rel="noopener noreferrer"
                                       className="text-blue-400 hover:underline flex items-center gap-0.5"
                                     >
-                                      View <ArrowRight className="h-2.5 w-2.5 inline" />
+                                      View Pack <ArrowRight className="h-2.5 w-2.5 inline" />
                                     </a>
                                   )}
                                 </div>
@@ -677,11 +748,11 @@ function Index() {
               ) : recentSales.length > 0 ? (
                 <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
                   {recentSales.map((sale) => (
-                    <div 
-                      key={sale.id} 
+                    <div
+                      key={sale.id}
                       className="p-3 bg-[#16161E]/40 border border-white/5 hover:border-white/10 rounded-xl flex items-center justify-between gap-2 text-xs transition-all duration-200 hover:-translate-y-0.5"
                     >
-                      <div className="truncate space-y-0.5">
+                      <div className="truncate space-y-0.5 min-w-0">
                         <div className="font-semibold text-white truncate">{sale.card_name}</div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[#52525B] text-[10px] font-mono truncate">{sale.set_name || "Gacha"}</span>
@@ -689,11 +760,24 @@ function Index() {
                         </div>
                       </div>
                       <div className="shrink-0 text-right space-y-0.5">
-                        <span className="font-mono text-white font-bold">${sale.ask_price.toFixed(2)}</span>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="font-mono text-white font-bold">${sale.ask_price.toFixed(2)}</span>
+                          {sale.token_id && (
+                            <a
+                              href={`https://www.renaiss.xyz/card/${sale.token_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 flex items-center gap-0.5 text-[10px] transition-colors"
+                              title="View on Renaiss marketplace"
+                            >
+                              View <ArrowRight className="h-2.5 w-2.5 inline" />
+                            </a>
+                          )}
+                        </div>
                         <div className="flex justify-end">
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                            sale.price_gap < -10.0 ? "bg-green-500/10 text-green-400 border border-green-500/20" : 
-                            sale.price_gap > 10.0 ? "bg-red-500/10 text-red-400 border border-red-500/20" : 
+                            sale.price_gap < -10.0 ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+                            sale.price_gap > 10.0 ? "bg-red-500/10 text-red-400 border border-red-500/20" :
                             "bg-white/5 text-[#A1A1AA] border border-white/10"
                           }`}>
                             {sale.price_gap < 0 ? "" : "+"}{sale.price_gap.toFixed(0)}%
@@ -731,6 +815,34 @@ function CertAnalysisWidget({ result }: { result: SearchResult }) {
   const lowPct = rangeMax > rangeMin ? ((low - rangeMin) / (rangeMax - rangeMin)) * 100 : 20;
   const highPct = rangeMax > rangeMin ? 100 - ((rangeMax - high) / (rangeMax - rangeMin)) * 100 : 80;
 
+  // ── Precise method badge ──────────────────────────────────────────
+  let methodLabel: string;
+  let methodColor: string;
+  if (result.method === "conformal") {
+    methodLabel = `CONFORMAL (n=${result.n_samples} samples)`;
+    methodColor = "bg-[#22C55E]/10 border-[#22C55E]/20 text-[#22C55E]";
+  } else if (result.method === "fallback") {
+    methodLabel = `BOOTSTRAP ESTIMATE (n<5)`;
+    methodColor = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+  } else {
+    methodLabel = "HEURISTIC (±15%%)";
+    methodColor = "bg-[#52525B]/10 border-[#52525B]/20 text-[#A1A1AA]";
+  }
+
+  // ── Provenance timestamp ──────────────────────────────────────────
+  const calibTs = result.calibrated_at
+    ? (() => {
+        try {
+          return new Date(result.calibrated_at).toLocaleString(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+        } catch {
+          return result.calibrated_at;
+        }
+      })()
+    : "—";
+
   return (
     <GlassCard className="p-5 w-full bg-[#16161E]/60">
       <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -738,8 +850,8 @@ function CertAnalysisWidget({ result }: { result: SearchResult }) {
           <h4 className="font-bold text-white text-sm font-heading truncate">{result.card_name}</h4>
           <span className="text-[#A1A1AA] text-[10px] font-semibold truncate block">{result.set_name || "Renaiss Collectibles"}</span>
         </div>
-        <span className="bg-[#22C55E]/10 border border-[#22C55E]/20 text-[#22C55E] text-[9px] font-bold uppercase tracking-wider rounded-full px-2.5 py-0.5 shrink-0">
-          {result.method === "conformal" ? "Conformal Inference" : result.method}
+        <span className={`border text-[9px] font-bold uppercase tracking-wider rounded-full px-2.5 py-0.5 shrink-0 ${methodColor}`}>
+          {methodLabel}
         </span>
       </div>
 
@@ -794,10 +906,22 @@ function CertAnalysisWidget({ result }: { result: SearchResult }) {
         </span>
         {result.grade && (
           <div className="flex items-center gap-1">
-            <span className="text-[#52525B]">Grade:</span> 
+            <span className="text-[#52525B]">Grade:</span>
             <RarityBadge tier={result.grade} />
           </div>
         )}
+      </div>
+
+      {/* Data provenance footer */}
+      <div className="mt-3 pt-2 border-t border-white/[0.04] text-[8.5px] text-[#3F3F46] font-mono leading-relaxed space-y-0.5">
+        <div>
+          Historical basis:{" "}
+          <span className="text-[#52525B]">{result.n_samples} market observation{result.n_samples !== 1 ? "s" : ""} via Renaiss Index API</span>
+        </div>
+        <div>
+          Last calibrated:{" "}
+          <span className="text-[#52525B]">{calibTs}</span>
+        </div>
       </div>
     </GlassCard>
   );

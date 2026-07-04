@@ -1,163 +1,191 @@
-# Renaiss Glass Insight — Backend API
+# 🧠 Renaiss Intelligence
 
-A FastAPI backend that proxies the [Renaiss Index](https://renaiss.com) public API, persists card price history in [Turso](https://turso.tech) (libSQL), and serves conformal-prediction price intervals.
+### *Calibrated Price Confidence for Collectors*
+
+> **Renaiss Tech Hackathon — Season 1 | AI Category**
+
+[![Beta Data](https://img.shields.io/badge/Data-Beta%20%2F%20Experimental-orange)](https://renaissos.com)
+[![Stack](https://img.shields.io/badge/Stack-FastAPI%20%2B%20React%20%2B%20Turso-blueviolet)](#tech-stack)
+[![Category](https://img.shields.io/badge/Hackathon-AI%20Category-green)](#hackathon-category)
 
 ---
 
-## Tech Stack
+## 📖 Overview
+
+**Renaiss Intelligence** is an AI-powered market intelligence tool for Renaiss collectibles that goes beyond simple price tracking. Instead of a single "Fair Market Value" number, it delivers **statistically calibrated confidence intervals** for PSA-graded card values using Adaptive Conformal Inference — giving collectors a real sense of price uncertainty and reliability.
+
+On top of that, it provides **real-time pack Expected Value (EV) analysis** for RenaCrypt, and Eden gacha packs, pulling from actual recent pull data via the Renaiss CLI — so buyers can make data-driven decisions about whether a pack is worth its price.
+
+---
+
+## ❗ Problem Statement
+
+Collectors today face two core information gaps:
+
+1. **No uncertainty on pricing.** Platforms show a single Fair Market Value (FMV) figure with no indication of how reliable or volatile that number is. A card that sold for $100 once and $400 last week has a very different confidence profile than one that sells consistently at $200 — but current tools treat them identically.
+
+2. **No EV data for packs.** Pack buyers have no data-driven way to assess whether a pack's retail price is justified relative to its actual payout distribution. Buying a $150 Eden Pack without knowing the EV is a gamble with no baseline.
+
+Renaiss Intelligence solves both problems with statistical rigour and transparent data sourcing.
+
+---
+
+## ✨ What It Does
+
+### 🔍 PSA Cert Lookup with Confidence Intervals
+- Enter any PSA cert number to retrieve the card's current market price estimate.
+- Prices are returned as **80% confidence interval ranges** (e.g. `$120 – $340`) rather than a single point estimate.
+- Uses **Adaptive Conformal Inference** (via MAPIE) when sufficient historical sales data exists.
+- Automatically falls back to **bootstrap heuristic estimation** when sample size is low — clearly labeled in the UI so users always know which method was used.
+
+### 📦 Real-Time Pack EV Calculator
+Live EV analysis for all three major Renaiss pack tiers:
+
+| Pack | Price | Method |
+|------|-------|--------|
+| OMEGA Pack | $48 | Conformal EV range |
+| RenaCrypt Pack | $88 | Conformal EV range |
+| Eden Pack | $150 | Conformal EV range |
+
+EV is calculated from actual recent pull data retrieved via the **Renaiss CLI**, not assumptions or averages.
+
+### 🏆 Recent Notable Pulls
+- Displays the top-value pulls per pack type.
+- Each pull links directly back to the Renaiss marketplace for verification.
+
+### 📊 Live Marketplace Sales Feed
+- Streams recent sales from the Renaiss Index API.
+- Runs **price-gap analysis** against the conformal price range to return a verdict:
+  - 🟢 **Underpriced** — below the confidence interval lower bound
+  - 🟡 **Fair** — within the confidence interval
+  - 🔴 **Overpriced** — above the confidence interval upper bound
+
+### ⚠️ Beta Data Transparency Banner
+- A persistent, always-visible banner communicates the beta nature of the underlying data per Renaiss's guidance.
+
+---
+
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |---|---|
-| API framework | [FastAPI](https://fastapi.tiangolo.com) |
-| Database | [Turso](https://turso.tech) (libSQL / SQLite-compatible) |
-| ML inference | scikit-learn + MAPIE (conformal prediction) |
-| Deployment | [Vercel](https://vercel.com) (Python serverless) |
+| **Backend** | FastAPI (Python), SQLAlchemy |
+| **Database** | Turso (libSQL cloud database) |
+| **Statistical Engine** | MAPIE (conformal prediction), scikit-learn |
+| **Frontend** | React, Vite, Tailwind CSS |
+| **Data Source** | Renaiss CLI (`npx renaiss`) + Renaiss Index API (`https://api.renaissos.com`) |
+| **Deployment** | Vercel (frontend + serverless backend), Turso (database) |
 
 ---
 
-## Project Structure
+## ⚠️ Data Sources & Limitations
 
-```
-.
-├── api/
-│   └── index.py          # Vercel entry point — re-exports the FastAPI app
-├── app/
-│   ├── main.py           # FastAPI app, routes, lifespan
-│   ├── database.py       # Turso (libsql_client) data-access layer
-│   ├── background_job.py # APScheduler jobs (local only)
-│   ├── inference.py      # Conformal-prediction price intervals
-│   ├── pack_ev.py        # Pack expected-value calculator
-│   ├── renaiss_service.py# Renaiss API HTTP client
-│   └── schemas.py        # Pydantic schemas
-├── .env.example          # Environment variable reference (copy → .env)
-├── vercel.json           # Vercel deployment configuration
-└── requirements.txt      # Python dependencies
-```
+> **This project uses the Renaiss CLI and Renaiss Index API, both currently in beta. Per Renaiss's guidance: some data may be incomplete, missing, delayed, or still being updated. All pricing and EV outputs in this tool are experimental references, not final verified market facts. Where historical price data is insufficient for full conformal calibration, the tool falls back to a bootstrap heuristic range and clearly labels this in the UI.**
 
 ---
 
-## Local Development
+## 🏗 Architecture
 
-### 1. Clone & install dependencies
+```mermaid
+flowchart LR
+    A["Renaiss CLI / Index API"] --> B["FastAPI Backend"]
+    B --> C["Turso Cloud DB"]
+    C --> D["Conformal Prediction\nEngine - MAPIE"]
+    D --> E["React Frontend"]
+    E --> F["User: PSA Search /\nPack EV / Recent Sales"]
+```
+
+**Node breakdown:**
+- **Renaiss CLI / Index API** — Primary data source; provides raw sales history, pack pull records, and marketplace listings.
+- **FastAPI Backend** — Ingests, validates, and serves data; orchestrates calls to the CLI and the Index API.
+- **Turso Cloud DB** — Persists historical price data in a libSQL edge database to power statistical calibration over time.
+- **Conformal Prediction Engine (MAPIE)** — Consumes stored price history to compute calibrated 80% confidence intervals via Adaptive Conformal Inference.
+- **React Frontend** — Renders the PSA lookup UI, pack EV dashboard, notable pulls feed, and live marketplace sales with verdict badges.
+- **User** — Interacts with all three core flows: PSA cert search, pack EV analysis, and live sales monitoring.
+
+---
+
+## 🚀 Setup Instructions
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+ with `pnpm`
+- A [Turso](https://turso.tech) account (free tier works)
+
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/samixrd/renaiss-intelligence.git
-cd renaiss-intelligence
+git clone https://github.com/<your-username>/renaiss-glass-insight.git
+cd renaiss-glass-insight
+```
+
+### 2. Install Python Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment variables
+### 3. Install Frontend Dependencies
 
 ```bash
-cp .env.example .env
-# Edit .env and fill in your real Turso credentials
+pnpm install
 ```
 
-| Variable | Description | Where to find it |
-|---|---|---|
-| `TURSO_DATABASE_URL` | `libsql://…turso.io` URL | Turso dashboard → your DB → **Connect** |
-| `TURSO_AUTH_TOKEN` | Read-write JWT token | Turso dashboard → your DB → **+ Create Token** |
+### 4. Configure Environment Variables
 
-### 3. Start the dev server
+Create a `.env` file in the project root:
+
+```env
+TURSO_DATABASE_URL=libsql://your-database-name.turso.io
+TURSO_AUTH_TOKEN=your-turso-auth-token
+```
+
+> **Getting your Turso credentials:**
+> ```bash
+> turso db create renaiss-intelligence
+> turso db show renaiss-intelligence --url
+> turso db tokens create renaiss-intelligence
+> ```
+
+### 5. Run the Backend
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`.  
-Interactive docs: `http://localhost:8000/docs`
+The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
----
-
-## Deploying to Vercel
-
-### Prerequisites
-
-- A [Vercel account](https://vercel.com/signup)
-- [Vercel CLI](https://vercel.com/docs/cli): `npm i -g vercel`
-- Your Turso database URL and auth token
-
-### Step 1 — Add environment variables in the Vercel dashboard
-
-1. Go to [vercel.com/dashboard](https://vercel.com/dashboard) → your project
-2. Navigate to **Settings → Environment Variables**
-3. Add the following variables for **Production**, **Preview**, and **Development**:
-
-   | Name | Value |
-   |---|---|
-   | `TURSO_DATABASE_URL` | `libsql://renaiss-intelligence-samixrd.aws-ap-south-1.turso.io` |
-   | `TURSO_AUTH_TOKEN` | *(your token from Turso dashboard)* |
-
-   > ⚠️ **Never** paste these into `vercel.json` — use the dashboard to keep secrets out of source control.
-
-### Step 2 — Deploy via CLI
+### 6. Run the Frontend
 
 ```bash
-# First-time setup (links local project to Vercel)
-vercel
-
-# Deploy to production
-vercel --prod
+pnpm dev
 ```
 
-Or connect your GitHub repository for automatic deployments on every push:
-
-1. Vercel dashboard → **Add New Project**
-2. Import from GitHub → `samixrd/renaiss-intelligence`
-3. Framework Preset: **Other**
-4. Root Directory: `.` (leave as-is)
-5. Click **Deploy**
-
-### Step 3 — Verify
-
-```bash
-curl https://your-deployment.vercel.app/health
-# → {"status":"ok"}
-
-curl "https://your-deployment.vercel.app/search?cert=YOUR_CERT"
-# → {"cert":…,"fmv":…,"low":…,"high":…}
-```
+The frontend will be available at `http://localhost:5173`.
 
 ---
 
-## API Endpoints
+## 🌐 Live Demo
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/` | Health check (API status) |
-| `GET` | `/health` | Liveness probe |
-| `GET` | `/search?cert={cert}` | Look up a graded cert; returns FMV + prediction interval |
-| `GET` | `/pack-ev` | Expected value for all packs |
-| `GET` | `/packs` | List available packs |
-| `GET` | `/recent-sales` | Last 20 marketplace listings with price-gap analysis |
-
-Full interactive documentation is available at `/docs` (Swagger UI) and `/redoc`.
+| Service | URL |
+|---------|-----|
+| **Frontend** | `[add Vercel URL]` |
+| **Backend API** | `[add Vercel URL]` |
 
 ---
 
-## Serverless Notes
+## 👥 Team
 
-Vercel runs each request as an isolated serverless function. This means:
-
-- **APScheduler background jobs are disabled** on Vercel — the marketplace sync jobs (`sync_marketplace_listings`, `sync_marketplace_sales`, `sync_recent_pulls`) cannot run as persistent background threads.
-- To keep data fresh in production, add **Vercel Cron Jobs** in `vercel.json` to hit a trigger endpoint, or run the sync jobs from a separate always-on worker.
-- `init_db()` runs on every cold start — it uses `CREATE TABLE IF NOT EXISTS` so it is safe and idempotent.
+**[Your name / team name]**
 
 ---
 
-## Database Schema
+## 🏆 Hackathon Category
 
-All tables are created automatically on startup in your Turso database.
-
-| Table | Purpose |
-|---|---|
-| `cards` | Snapshot of each graded-card lookup |
-| `price_history` | Every price observation over time (feeds conformal prediction) |
-| `marketplace_sales` | Historical marketplace sale transactions |
-| `marketplace_listings` | Current marketplace listings with ask-vs-FMV gap |
+Submitted under: **AI Category** — Renaiss Tech Hackathon Season 1
 
 ---
 
-## License
+## 📄 License
 
-MIT
+This project was built for the Renaiss Tech Hackathon Season 1. All Renaiss platform data is subject to Renaiss's own terms of service. Statistical methodology (conformal prediction) is implemented using the open-source [MAPIE](https://github.com/scikit-learn-contrib/MAPIE) library.

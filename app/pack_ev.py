@@ -46,6 +46,8 @@ PACK_METADATA = {
         "name": "OMEGA",
         "cost": 48.00,
         "expected_value": OMEGA_PROB_EV,
+        # Canonical gacha page for this pack on renaiss.xyz
+        "gacha_url": "https://www.renaiss.xyz/gacha/omega",
         "rarity_breakdown": [
             {"tier": "S", "probability": 0.03, "avg_fmv": 690.0},
             {"tier": "B", "probability": 0.10, "avg_fmv": 64.0},
@@ -56,6 +58,7 @@ PACK_METADATA = {
         "name": "RenaCrypt Pack",
         "cost": 88.00,
         "expected_value": RENACRYPT_PROB_EV,
+        "gacha_url": "https://www.renaiss.xyz/gacha/renacrypt-pack",
         "rarity_breakdown": [
             {"tier": "common", "probability": 0.60, "avg_fmv": 67.0},
             {"tier": "uncommon", "probability": 0.30, "avg_fmv": 117.0},
@@ -67,6 +70,7 @@ PACK_METADATA = {
         "name": "Eden Pack",
         "cost": 150.00,
         "expected_value": EDEN_PROB_EV,
+        "gacha_url": "https://www.renaiss.xyz/gacha/eden-pack",
         "rarity_breakdown": [
             {"tier": "common", "probability": 0.67, "avg_fmv": 66.0},
             {"tier": "uncommon", "probability": 0.33, "avg_fmv": 263.0},
@@ -207,8 +211,14 @@ async def calculate_pack_ev(pack_name: str) -> dict:
         
     ev_ratio = expected_value / cost
 
-    # Extract Top 3 highest-FMV pulls as Recent Notable Pulls
+    # Extract Top 3 highest-FMV pulls as Recent Notable Pulls.
+    # Pulled cards may not be individually listed for sale yet, so we link to
+    # the pack's gacha page rather than a per-token URL that may 404.
+    # Confirmed working URL pattern: https://www.renaiss.xyz/card/{token_id}
+    # is valid for cards that ARE on the marketplace; gacha_url is the safe
+    # fallback for freshly-opened pulls.
     notable_pulls = []
+    gacha_url = meta.get("gacha_url")
     if pulls:
         sorted_pulls = sorted(pulls, key=lambda x: float(x.get("fmv", 0)), reverse=True)
         for pull in sorted_pulls[:3]:
@@ -220,7 +230,9 @@ async def calculate_pack_ev(pack_name: str) -> dict:
                 "token_id": token_id,
                 "fmv": fmv_usd,
                 "tier": tier,
-                "marketplace_url": f"https://www.renaiss.xyz/marketplace/{token_id}" if token_id else None
+                # Link to the pack gacha page — individual pulled cards are
+                # not guaranteed to be listed on the marketplace.
+                "marketplace_url": gacha_url,
             })
 
     return {

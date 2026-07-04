@@ -24,6 +24,10 @@ export interface SearchResult {
   confidence: number;
   /** "conformal" when ≥5 history points, "fallback" for 1-4, "hint" for 0 */
   method: "conformal" | "fallback" | "hint";
+  /** Number of historical price observations used for calibration */
+  n_samples: number;
+  /** ISO-8601 UTC timestamp of when the interval was last calibrated */
+  calibrated_at: string | null;
   confidence_tier: string;
   freshness_days: number;
 }
@@ -47,6 +51,8 @@ export interface PackEVResult {
 /** Shape returned by GET /recent-sales (marketplace_listings table) */
 export interface RecentSale {
   id: number;
+  /** On-chain token ID — used to build the renaiss.xyz/card/{token_id} link */
+  token_id: string;
   card_name: string;
   set_name: string | null;
   year: number | null;

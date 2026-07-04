@@ -11,11 +11,16 @@ size limit, so we use a lightweight pure-Python implementation:
 
 This gives sensible, calibrated-ish intervals without any compiled
 dependencies.
+
+All returned dicts include:
+  ``n_samples``     – number of historical observations used.
+  ``calibrated_at`` – ISO-8601 UTC timestamp of this calibration run.
 """
 
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 
 from app.database import get_price_history
 
@@ -77,6 +82,8 @@ async def get_price_interval(
     """
     history = await get_price_history(cert)
 
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     # ── No history at all ──────────────────────────────────────────
     if not history:
         if fmv_hint is not None:
@@ -93,6 +100,8 @@ async def get_price_interval(
             "high": round(fmv + margin, 2),
             "confidence": confidence,
             "method": "hint",
+            "n_samples": 0,
+            "calibrated_at": now_iso,
         }
 
     # ── Not enough data → simple heuristic ────────────────────────
@@ -105,6 +114,8 @@ async def get_price_interval(
             "high": round(fmv + margin, 2),
             "confidence": confidence,
             "method": "fallback",
+            "n_samples": len(history),
+            "calibrated_at": now_iso,
         }
 
     # ── Enough data → lightweight statistical interval ─────────────
@@ -127,4 +138,6 @@ async def get_price_interval(
         "high": round(fmv + margin, 2),
         "confidence": confidence,
         "method": "conformal",
+        "n_samples": n,
+        "calibrated_at": now_iso,
     }
