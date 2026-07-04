@@ -8,6 +8,7 @@
 [![Stack](https://img.shields.io/badge/Stack-FastAPI%20%2B%20React%20%2B%20Turso-blueviolet)](#tech-stack)
 [![Category](https://img.shields.io/badge/Hackathon-AI%20Category-green)](#hackathon-category)
 
+live website: https://renaiss-intelligence-frontend.vercel.app/
 ---
 
 ## 📖 Overview
