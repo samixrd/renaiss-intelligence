@@ -114,38 +114,51 @@ async def fetch_recent_pulls(pack_slug: str) -> list[dict]:
         saved_count = 0
         pack_name = PACK_METADATA[pack_slug]["name"]
 
-        for pull in pulls:
-            token_id = pull.get("collectibleTokenId")
-            if not token_id:
-                continue
-
-            # Skip if this pull already exists in the database
-            if await check_cert_exists(token_id):
-                continue
-
-            tier = pull.get("tier", "common")
-            # Parse fmv (it comes in cents/sub-units, e.g. 5100 represents $51.00)
-            raw_fmv = float(pull.get("fmv", 0))
-            fmv_usd = raw_fmv / 100.0
-
-            # Convert pulledAtTimestamp (UNIX timestamp) to offset-aware datetime.
-            timestamp = datetime.fromtimestamp(pull.get("pulledAtTimestamp"), timezone.utc)
-
-            # Persist pull to cards + price_history tables.
-            await save_card_price(
-                card_name=f"{pack_name} Pull ({tier} Tier)",
-                set_name=f"{pack_name} Pulls",
-                item_no=token_id[-8:],
-                cert=token_id,
-                grade=f"Tier {tier}",
-                fmv=fmv_usd,
-                confidence_tier="high" if tier in ("S", "epic") else "medium",
-                freshness_days=0,
-                fetched_at=timestamp,
-                pack_name=pack_name,
-                rarity=tier,
-            )
-            saved_count += 1
+        # Collect non-null token IDs
+        pulls_to_process = [p for p in pulls if p.get("collectibleTokenId")]
+        
+        if pulls_to_process:
+            # Check all of them in parallel
+            token_ids = [p["collectibleTokenId"] for p in pulls_to_process]
+            exists_checks = await asyncio.gather(*(check_cert_exists(tid) for tid in token_ids))
+            
+            # Filter to only the pulls that don't exist in the database
+            pulls_to_save = [
+                p for p, exists in zip(pulls_to_process, exists_checks) if not exists
+            ]
+            
+            # Save new pulls in parallel
+            save_tasks = []
+            for pull in pulls_to_save:
+                token_id = pull["collectibleTokenId"]
+                tier = pull.get("tier", "common")
+                raw_fmv = float(pull.get("fmv", 0))
+                fmv_usd = raw_fmv / 100.0
+                timestamp = datetime.fromtimestamp(pull.get("pulledAtTimestamp"), timezone.utc)
+                
+                save_tasks.append(
+                    save_card_price(
+                        card_name=f"{pack_name} Pull ({tier} Tier)",
+                        set_name=f"{pack_name} Pulls",
+                        item_no=token_id[-8:],
+                        cert=token_id,
+                        grade=f"Tier {tier}",
+                        fmv=fmv_usd,
+                        confidence_tier="high" if tier in ("S", "epic") else "medium",
+                        freshness_days=0,
+                        fetched_at=timestamp,
+                        pack_name=pack_name,
+                        rarity=tier,
+                    )
+                )
+            
+            if save_tasks:
+                await asyncio.gather(*save_tasks)
+                saved_count = len(save_tasks)
+            else:
+                saved_count = 0
+        else:
+            saved_count = 0
 
         log.info("Saved %d new pulls for %s into database", saved_count, pack_slug)
         return pulls

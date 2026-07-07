@@ -116,10 +116,12 @@ async def sync_marketplace_listings() -> None:
     """
     log.info("▶ sync_marketplace_listings started")
     try:
+        import asyncio
         items = await _fetch_marketplace_items(offset=0)
         upserted = 0
         now = datetime.now(timezone.utc)
 
+        tasks = []
         for item in items:
             token_id = item.get("tokenId")
             if not token_id:
@@ -139,18 +141,23 @@ async def sync_marketplace_listings() -> None:
 
             price_gap = (ask_price - fmv) / fmv * 100.0
 
-            await save_marketplace_listing(
-                token_id=token_id,
-                card_name=item.get("name", "Unknown Collectible"),
-                set_name=item.get("setName"),
-                year=item.get("year"),
-                grade=item.get("grade"),
-                ask_price=round(ask_price, 2),
-                fmv=round(fmv, 2),
-                price_gap=round(price_gap, 2),
-                fetched_at=now,
+            tasks.append(
+                save_marketplace_listing(
+                    token_id=token_id,
+                    card_name=item.get("name", "Unknown Collectible"),
+                    set_name=item.get("setName"),
+                    year=item.get("year"),
+                    grade=item.get("grade"),
+                    ask_price=round(ask_price, 2),
+                    fmv=round(fmv, 2),
+                    price_gap=round(price_gap, 2),
+                    fetched_at=now,
+                )
             )
-            upserted += 1
+
+        if tasks:
+            await asyncio.gather(*tasks)
+            upserted = len(tasks)
 
         log.info("✔ sync_marketplace_listings done — %d listing(s) upserted", upserted)
     except Exception:

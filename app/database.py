@@ -576,7 +576,7 @@ async def get_recent_distinct_certs(limit: int = 3) -> list[str]:
     async with _get_client() as client:
         # Group by cert to make it distinct, and order by the newest fetched_at
         result = await client.execute(
-            "SELECT cert FROM cards GROUP BY cert ORDER BY MAX(fetched_at) DESC LIMIT ?",
+            "SELECT cert FROM cards WHERE cert LIKE 'PSA%' GROUP BY cert ORDER BY MAX(fetched_at) DESC LIMIT ?",
             [limit],
         )
     return [row[0] for row in result.rows]

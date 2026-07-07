@@ -98,8 +98,17 @@ export function searchByCert(cert: string): Promise<SearchResult> {
   return get<SearchResult>(`/search?cert=${encodeURIComponent(cert)}`);
 }
 
+let packEvPromise: Promise<PackEVResult[]> | null = null;
+
 export async function fetchPackEV(pack: string): Promise<PackEVResult> {
-  const allPacks = await get<PackEVResult[]>("/pack-ev");
+  if (!packEvPromise) {
+    packEvPromise = get<PackEVResult[]>("/pack-ev").finally(() => {
+      setTimeout(() => {
+        packEvPromise = null;
+      }, 0);
+    });
+  }
+  const allPacks = await packEvPromise;
   const target = pack.toLowerCase().replace(/\s*pack/g, "");
   const found = allPacks.find(
     (p) => p.pack_name.toLowerCase().replace(/\s*pack/g, "") === target
