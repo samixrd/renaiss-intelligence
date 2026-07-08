@@ -116,7 +116,7 @@ flowchart LR
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/renaiss-glass-insight.git
+git clone https://github.com/samixrd/renaiss-glass-insight.git
 cd renaiss-glass-insight
 ```
 
