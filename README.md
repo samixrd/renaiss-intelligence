@@ -117,7 +117,7 @@ flowchart LR
 
 ```bash
 git clone https://github.com/samixrd/renaiss-intelligence
-cd renaiss-glass-insight
+cd renaiss-glass-insight-main
 ```
 
 ### 2. Install Python Dependencies
